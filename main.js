@@ -19,8 +19,8 @@ let leftHandLandmarks = null;
 let rightHandLandmarks = null;
 
 let targetCameraZ = 150; // Target Z position for smooth zoom - increased for wider view
-const MIN_CAMERA_Z = 35;
-const MAX_CAMERA_Z = 220;
+const MIN_CAMERA_Z = 20;
+const MAX_CAMERA_Z = 300;
 const MIN_PINCH_DIST = 0.02; // Minimum distance between thumb and index for max zoom-in
 const MAX_PINCH_DIST = 0.18; // Maximum distance for max zoom-out (adjust based on testing)
 
@@ -33,15 +33,15 @@ let handsComeCloser = false;
 let handsMovingApart = false;
 let clapDetected = false;
 let lastClapTime = 0;
-const MIN_HANDS_DISTANCE = 0.15; // Threshold for hands being close enough
+const MIN_HANDS_DISTANCE = 0.1; // Threshold for hands being close enough
 const CLAP_COOLDOWN = 1500; // Cooldown between claps (ms)
 
 // --- Camera Rotation Variables ---
 let targetCameraAngleX = 0;   // Target horizontal rotation angle (radians) based on hand
 let currentCameraAngleX = 0; // Current smoothed horizontal rotation angle
 let initialHandAngle = null; // Store initial angle when right hand appears
-const rotationSensitivity = 4.0; // Increased sensitivity for more noticeable rotation
-const rotationSmoothing = 0.08; // Smoothing factor for rotation (lower = smoother)
+const rotationSensitivity = 1.0; // Increased sensitivity for more noticeable rotation
+const rotationSmoothing = 0.06; // Smoothing factor for rotation (lower = smoother)
 // ---
 
 // References for drawing
@@ -77,26 +77,25 @@ const params = {
 // --- START Execution ---
 // Use DOMContentLoaded to ensure HTML is parsed and elements are available
 function startExperience() {
-  if (typeof THREE === 'undefined') {
-    console.error("THREE.js core library not found!");
-    alert("Error: THREE.js library failed to load.");
-    return;
-  }
-  init();
-  if (renderer) {
-    animate();
-  } else {
-    console.error("Renderer initialization failed. Animation cannot start.");
-  }
+    // Basic check for THREE core first
+    if (typeof THREE === 'undefined') {
+      console.error("THREE.js core library not found!");
+      alert("Error: THREE.js library failed to load.");
+      return;
+    }
+    
+    // Proceed with initialization
+    init();
+    if (renderer) {
+      animate();
+    } else {
+      console.error("Renderer initialization failed. Animation cannot start.");
+    }
 }
 
-// Check if document is already loaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startExperience);
-} else {
-  // DOMContentLoaded has already fired
-  startExperience();
-}
+// --- Add this line to trigger execution after all resources are loaded ---
+window.onload = startExperience;
+// --- End of Execution Start block ---
 
 const patternNames = ["Cosmic Sphere", "Spiral Nebula", "Quantum Helix", "Stardust Grid", "Celestial Torus"];
 
@@ -265,58 +264,6 @@ map: createParticleTexture()
 return new THREE.Points(geometry, material);
 }
 
-
-// --- POST PROCESSING ---
-function initPostProcessing() {
-// Check if THREE objects exist before using them
-if (typeof THREE === 'undefined' || typeof THREE.EffectComposer === 'undefined' ||
-typeof THREE.RenderPass === 'undefined' ||
-typeof THREE.UnrealBloomPass === 'undefined' ||
-typeof THREE.ShaderPass === 'undefined' ||
-typeof THREE.HorizontalBlurShader === 'undefined' ||
-typeof THREE.VerticalBlurShader === 'undefined') {
-console.error("Required THREE.js post-processing components not found. Make sure all scripts are loaded correctly.");
-composer = null; // Disable post-processing
-return;
-}
-
-try {
-// Create effect composer
-composer = new THREE.EffectComposer(renderer); // Use THREE.EffectComposer
-
-// Add render pass
-const renderPass = new THREE.RenderPass(scene, camera); // Use THREE.RenderPass
-composer.addPass(renderPass);
-
-// Add bloom pass
-bloomPass = new THREE.UnrealBloomPass( // Use THREE.UnrealBloomPass
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
-    params.bloomStrength,
-    params.bloomRadius,
-    params.bloomThreshold
-);
-composer.addPass(bloomPass);
-
-// Add horizontal blur pass
-blurPass = new THREE.ShaderPass(THREE.HorizontalBlurShader); // Use THREE.ShaderPass and THREE.HorizontalBlurShader
-blurPass.uniforms.h.value = params.blurAmount / window.innerWidth;
-composer.addPass(blurPass);
-
-// Add vertical blur pass
-verticalBlurPass = new THREE.ShaderPass(THREE.VerticalBlurShader); // Use THREE.ShaderPass and THREE.VerticalBlurShader
-verticalBlurPass.uniforms.v.value = params.blurAmount / window.innerHeight;
-composer.addPass(verticalBlurPass);
-
-// Make sure the final pass renders to screen
-verticalBlurPass.renderToScreen = true;
-
-} catch (error) {
-console.error("Error setting up post-processing:", error);
-// Fall back to normal rendering if post-processing fails
-composer = null;
-}
-}
-
 // --- INIT THREE.JS ---
 function init() {
 scene = new THREE.Scene();
@@ -337,7 +284,6 @@ return;
 
 particles = createParticleSystem();
 scene.add(particles);
-initPostProcessing();
 window.addEventListener('resize', onWindowResize);
 initGUI();
 updatePatternName(patternNames[currentPattern], true);
