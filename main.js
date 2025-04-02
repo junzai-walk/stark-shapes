@@ -10,7 +10,6 @@ function calculateDistance(landmark1, landmark2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-
 let hands;
 let handDetected = false; // Flag if *any* hand is detected
 let isLeftHandPresent = false;
@@ -18,10 +17,10 @@ let isRightHandPresent = false;
 let leftHandLandmarks = null;
 let rightHandLandmarks = null;
 
-let targetCameraZ = 150; // Target Z position for smooth zoom - increased for wider view
+let targetCameraZ = 100; // Target Z position for smooth zoom - increased for wider view
 const MIN_CAMERA_Z = 20;
-const MAX_CAMERA_Z = 300;
-const MIN_PINCH_DIST = 0.02; // Minimum distance between thumb and index for max zoom-in
+const MAX_CAMERA_Z = 200;
+const MIN_PINCH_DIST = 0.03; // Minimum distance between thumb and index for max zoom-in
 const MAX_PINCH_DIST = 0.18; // Maximum distance for max zoom-out (adjust based on testing)
 
 let lastPatternChangeTime = 0;
@@ -33,15 +32,15 @@ let handsComeCloser = false;
 let handsMovingApart = false;
 let clapDetected = false;
 let lastClapTime = 0;
-const MIN_HANDS_DISTANCE = 0.1; // Threshold for hands being close enough
+const MIN_HANDS_DISTANCE = 0.12; // Threshold for hands being close enough
 const CLAP_COOLDOWN = 1500; // Cooldown between claps (ms)
 
 // --- Camera Rotation Variables ---
 let targetCameraAngleX = 0;   // Target horizontal rotation angle (radians) based on hand
 let currentCameraAngleX = 0; // Current smoothed horizontal rotation angle
 let initialHandAngle = null; // Store initial angle when right hand appears
-const rotationSensitivity = 1.0; // Increased sensitivity for more noticeable rotation
-const rotationSmoothing = 0.06; // Smoothing factor for rotation (lower = smoother)
+const rotationSensitivity = 0.8; // Increased sensitivity for more noticeable rotation
+const rotationSmoothing = 0.03; // Smoothing factor for rotation (lower = smoother)
 // ---
 
 // References for drawing
@@ -60,11 +59,11 @@ let gui;
 
 // Animation parameters (configurable via dat.gui)
 const params = {
-    particleCount: 25000,
+    particleCount: 100000,
     transitionSpeed: 0.015,
     cameraSpeed: 0.0, // Set to 0 to disable default camera movement
-    waveIntensity: 0.2,
-    particleSize: 3.0,
+    waveIntensity: 0.1,
+    particleSize: 0.4,
     changePattern: function() {
         forcePatternChange();
     }
@@ -93,7 +92,7 @@ function startExperience() {
 window.onload = startExperience;
 // --- End of Execution Start block ---
 
-const patternNames = ["Cosmic Sphere", "Spiral Nebula", "Quantum Helix", "Stardust Grid", "Celestial Torus"];
+const patternNames = ["Cube", "Sphere", "Spiral", "Helix", "Torus"];
 
 // --- PATTERN FUNCTIONS ---
 function createSphere(i, count) {
@@ -169,7 +168,7 @@ r * Math.sin(v)
 );
 }
 
-const patterns = [createSphere, createSpiral, createHelix, createGrid, createTorus];
+const patterns = [createGrid, createSphere, createSpiral, createHelix, createTorus];
 
 // --- PARTICLE TEXTURE ---
 function createParticleTexture() {
@@ -202,61 +201,60 @@ return texture;
 
 // --- COLOR PALETTES ---
 const colorPalettes = [
-[ new THREE.Color(0x0077ff), new THREE.Color(0x00aaff), new THREE.Color(0x44ccff), new THREE.Color(0x0055cc) ],
-[ new THREE.Color(0x8800cc), new THREE.Color(0xcc00ff), new THREE.Color(0x660099), new THREE.Color(0xaa33ff) ],
-[ new THREE.Color(0x00cc66), new THREE.Color(0x33ff99), new THREE.Color(0x99ff66), new THREE.Color(0x008844) ],
-[ new THREE.Color(0xff9900), new THREE.Color(0xffcc33), new THREE.Color(0xff6600), new THREE.Color(0xffaa55) ],
-[ new THREE.Color(0xff3399), new THREE.Color(0xff66aa), new THREE.Color(0xff0066), new THREE.Color(0xcc0055) ]
+[ new THREE.Color(0x3399ff), new THREE.Color(0x44ccff), new THREE.Color(0x0055cc) ],
+[ new THREE.Color(0xff3399), new THREE.Color(0xcc00ff), new THREE.Color(0x660099), new THREE.Color(0xaa33ff) ],
+[ new THREE.Color(0x33ff99), new THREE.Color(0x33ff99), new THREE.Color(0x99ff66), new THREE.Color(0x008844) ],
+[ new THREE.Color(0xff9933), new THREE.Color(0xffcc33), new THREE.Color(0xff6600), new THREE.Color(0xffaa55) ],
+[ new THREE.Color(0x9933ff), new THREE.Color(0xff66aa), new THREE.Color(0xff0066), new THREE.Color(0xcc0055) ]
 ];
 
 // --- PARTICLE SYSTEM ---
 function createParticleSystem() {
-const geometry = new THREE.BufferGeometry();
-const positions = new Float32Array(params.particleCount * 3);
-const colors = new Float32Array(params.particleCount * 3);
-const sizes = new Float32Array(params.particleCount);
-const particleTypes = new Float32Array(params.particleCount); // Currently unused but kept
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(params.particleCount * 3);
+    const colors = new Float32Array(params.particleCount * 3);
+    const sizes = new Float32Array(params.particleCount);
 
-const initialPattern = patterns[0];
-const initialPalette = colorPalettes[0];
+    const initialPattern = patterns[0];
+    const initialPalette = colorPalettes[0];
 
-for (let i = 0; i < params.particleCount; i++) {
-particleTypes[i] = Math.floor(Math.random() * 3); // Example type
+    for (let i = 0; i < params.particleCount; i++) {
 
-const pos = initialPattern(i, params.particleCount);
-positions[i * 3] = pos.x;
-positions[i * 3 + 1] = pos.y;
-positions[i * 3 + 2] = pos.z;
+    const pos = initialPattern(i, params.particleCount);
+    positions[i * 3] = pos.x;
+    positions[i * 3 + 1] = pos.y;
+    positions[i * 3 + 2] = pos.z;
 
-const colorIndex = Math.floor(Math.random() * initialPalette.length);
-const baseColor = initialPalette[colorIndex];
-const variation = 0.85 + Math.random() * 0.3; // Add variation
+    //const colorIndex = Math.floor(Math.random() * initialPalette.length);
+    const colorIndex = 0;
+    const baseColor = initialPalette[colorIndex];
+    const variation = 1.0; // Add variation
 
-colors[i * 3] = baseColor.r * variation;
-colors[i * 3 + 1] = baseColor.g * variation;
-colors[i * 3 + 2] = baseColor.b * variation;
+    colors[i * 3] = baseColor.r * variation;
+    colors[i * 3 + 1] = baseColor.g * variation;
+    colors[i * 3 + 2] = baseColor.b * variation;
 
-sizes[i] = 1.0 + Math.random() * 1.5; // Assign individual size variation
-}
+    sizes[i] = 1.0; // Assign individual size variation
+    }
 
-geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1)); // Store base sizes
-geometry.setAttribute('particleType', new THREE.BufferAttribute(particleTypes, 1)); // Store types
-geometry.userData.currentColors = new Float32Array(colors); // Store initial colors for transitions
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1)); // Store base sizes
+    geometry.userData.currentColors = new Float32Array(colors); // Store initial colors for transitions
 
-const material = new THREE.PointsMaterial({
-size: params.particleSize,
-vertexColors: true,
-transparent: true,
-opacity: 0.5,
-blending: THREE.AdditiveBlending,
-sizeAttenuation: true, // Make distant particles smaller
-map: createParticleTexture()
-// depthWrite: false // Often needed with AdditiveBlending if particles overlap strangely
-});
+    const material = new THREE.PointsMaterial({
+    size: params.particleSize,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1.0,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true, // Make distant particles smaller
 
-return new THREE.Points(geometry, material);
+    //map: createParticleTexture()
+    // depthWrite: false // Often needed with AdditiveBlending if particles overlap strangely
+    });
+    return new THREE.Points(geometry, material);
+
 }
 
 // --- INIT THREE.JS ---
@@ -432,9 +430,10 @@ newPos[i * 3 + 2] = p.z;
 const newCol = new Float32Array(curCol.length);
 const palette = colorPalettes[newPattern];
 for (let i = 0; i < count; i++) {
-const idx = Math.floor(Math.random() * palette.length);
+//const idx = Math.floor(Math.random() * palette.length);
+const idx = 0;
 const base = palette[idx];
-const variation = 0.85 + Math.random() * 0.3; // Keep color variation consistent
+const variation = 1.0; // Keep color variation consistent
 newCol[i * 3] = base.r * variation;
 newCol[i * 3 + 1] = base.g * variation;
 newCol[i * 3 + 2] = base.b * variation;
@@ -476,10 +475,10 @@ const count = params.particleCount;
 if (!isTransitioning) {
     for (let i = 0; i < count; i++) {
         const idx = i * 3;
-        const noise1 = Math.sin(time * 0.5 + i * 0.01) * params.waveIntensity;
-        const noise2 = Math.cos(time * 0.3 + i * 0.02) * params.waveIntensity;
-        positions[idx] += noise1 * deltaTime * 5;
-        positions[idx + 1] += noise2 * deltaTime * 5;
+        const noise1 = Math.sin(time * 0.5 + i * 0.02) * params.waveIntensity;
+        const noise2 = Math.cos(time * 0.5 + i * 0.02) * params.waveIntensity;
+        positions[idx] += noise1 * deltaTime * 10;
+        positions[idx + 1] += noise2 * deltaTime * 10;
     }
     particles.geometry.attributes.position.needsUpdate = true;
 }
@@ -533,7 +532,7 @@ if (!isTransitioning) {
 // --- Camera Movement --- Updated Logic ---
 if (camera) {
     // --- Smooth Zoom Distance (Driven by Left Hand Pinch) ---
-    const zoomSpeed = 0.06;
+    const zoomSpeed = 0.04;
     // Use camera.position.length() for current distance in orbit
     const currentDistance = camera.position.length() > 0.1 ? camera.position.length() : targetCameraZ; // Avoid 0 length initially
     let smoothedDistance = currentDistance + (targetCameraZ - currentDistance) * zoomSpeed;
@@ -667,6 +666,14 @@ function onResults(results) {
                     targetCameraZ = mapRange(pinchDist, MIN_PINCH_DIST, MAX_PINCH_DIST, MIN_CAMERA_Z, MAX_CAMERA_Z);
                     // Clamp value just in case mapRange doesn't clamp perfectly
                     targetCameraZ = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, targetCameraZ));
+                    
+                    // --- Draw a white line connecting thumb and index finger ---
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(thumbTip.x * canvasElement.width, thumbTip.y * canvasElement.height);
+                    canvasCtx.lineTo(indexTip.x * canvasElement.width, indexTip.y * canvasElement.height);
+                    canvasCtx.strokeStyle = 'red';
+                    canvasCtx.lineWidth = 5;
+                    canvasCtx.stroke();
                 }
 
             } else { // Right Hand
@@ -702,7 +709,6 @@ function onResults(results) {
                     // We negate angleDelta because screen coordinates Y increase downwards
                     // A clockwise hand rotation (positive angleDelta) should result in orbiting left (negative camera angle change).
                     targetCameraAngleX = currentCameraAngleX - (angleDelta * rotationSensitivity);
-
                 }
             }
 
