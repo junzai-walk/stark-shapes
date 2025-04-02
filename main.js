@@ -51,7 +51,7 @@ let canvasCtx, canvasElement, videoElement;
 
 // Initialize variables
 let scene, camera, renderer, particles;
-let composer, bloomPass, blurPass, verticalBlurPass;
+let composer;
 let time = 0;
 let currentPattern = 0;
 let transitionProgress = 0;
@@ -65,10 +65,6 @@ const params = {
     cameraSpeed: 0.0, // Set to 0 to disable default camera movement
     waveIntensity: 0.2,
     particleSize: 3.0,
-    bloomStrength: 1.5,
-    bloomRadius: 0.75,
-    bloomThreshold: 0.2,
-    blurAmount: 2.0,
     changePattern: function() {
         forcePatternChange();
     }
@@ -249,7 +245,6 @@ geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1)); // Store bas
 geometry.setAttribute('particleType', new THREE.BufferAttribute(particleTypes, 1)); // Store types
 geometry.userData.currentColors = new Float32Array(colors); // Store initial colors for transitions
 
-// Use PointsMaterial for simplicity or ShaderMaterial for more control
 const material = new THREE.PointsMaterial({
 size: params.particleSize,
 vertexColors: true,
@@ -316,79 +311,70 @@ function updateInstructions() {
 
 // --- WINDOW RESIZE ---
 function onWindowResize() {
-if (!camera || !renderer) return;
+    if (!camera || !renderer) return;
 
-camera.aspect = window.innerWidth / window.innerHeight;
-camera.updateProjectionMatrix();
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
 
-// Update composer size if it exists
-if (composer) {
-composer.setSize(window.innerWidth, window.innerHeight);
+    // Update composer size if it exists
+    if (composer) {
+    composer.setSize(window.innerWidth, window.innerHeight);
+    }
 }
-
-// Update blur shader uniforms if they exist
-if (blurPass) {
-blurPass.uniforms.h.value = params.blurAmount / window.innerWidth;
-}
-if (verticalBlurPass) { // Use the stored reference
-verticalBlurPass.uniforms.v.value = params.blurAmount / window.innerHeight;
-}
-}
-
 
 // --- PATTERN CHANGE / TRANSITION ---
 function forcePatternChange() {
-if (isTransitioning) {
-completeCurrentTransition(); // Finish current transition instantly
-}
-const nextPattern = (currentPattern + 1) % patterns.length;
-transitionToPattern(nextPattern);
-updatePatternName(patternNames[nextPattern]); // Show name briefly
+    if (isTransitioning) {
+    completeCurrentTransition(); // Finish current transition instantly
+    }
+    const nextPattern = (currentPattern + 1) % patterns.length;
+    transitionToPattern(nextPattern);
+    updatePatternName(patternNames[nextPattern]); // Show name briefly
 }
 
 function completeCurrentTransition() {
-if (!isTransitioning || !particles || !particles.geometry || !particles.userData.toPositions || !particles.userData.toColors) {
-// Clear transition state if data is missing or geometry invalid
-isTransitioning = false;
-transitionProgress = 0;
-if (particles && particles.userData) {
+    if (!isTransitioning || !particles || !particles.geometry || !particles.userData.toPositions || !particles.userData.toColors) {
+    // Clear transition state if data is missing or geometry invalid
+    isTransitioning = false;
+    transitionProgress = 0;
+    if (particles && particles.userData) {
+        delete particles.userData.fromPositions;
+        delete particles.userData.toPositions;
+        delete particles.userData.fromColors;
+        delete particles.userData.toColors;
+        delete particles.userData.targetPattern;
+    }
+    return;
+    }
+
+    const positions = particles.geometry.attributes.position.array;
+    const colors = particles.geometry.attributes.color.array;
+
+    // Ensure arrays are valid before setting
+    if (positions && colors &&
+    particles.userData.toPositions && particles.userData.toColors &&
+    positions.length === particles.userData.toPositions.length &&
+    colors.length === particles.userData.toColors.length) {
+        positions.set(particles.userData.toPositions);
+        colors.set(particles.userData.toColors);
+        particles.geometry.userData.currentColors = new Float32Array(particles.userData.toColors); // Update stored colors
+        particles.geometry.attributes.position.needsUpdate = true;
+        particles.geometry.attributes.color.needsUpdate = true;
+        currentPattern = particles.userData.targetPattern; // Update current pattern index
+    } else {
+    console.error("Transition data length mismatch or invalid data on completion!");
+    }
+
+    // Clean up transition data
     delete particles.userData.fromPositions;
     delete particles.userData.toPositions;
     delete particles.userData.fromColors;
     delete particles.userData.toColors;
     delete particles.userData.targetPattern;
-}
-return;
-}
-
-const positions = particles.geometry.attributes.position.array;
-const colors = particles.geometry.attributes.color.array;
-
-// Ensure arrays are valid before setting
-if (positions && colors &&
-particles.userData.toPositions && particles.userData.toColors &&
-positions.length === particles.userData.toPositions.length &&
-colors.length === particles.userData.toColors.length) {
-    positions.set(particles.userData.toPositions);
-    colors.set(particles.userData.toColors);
-    particles.geometry.userData.currentColors = new Float32Array(particles.userData.toColors); // Update stored colors
-    particles.geometry.attributes.position.needsUpdate = true;
-    particles.geometry.attributes.color.needsUpdate = true;
-    currentPattern = particles.userData.targetPattern; // Update current pattern index
-} else {
-console.error("Transition data length mismatch or invalid data on completion!");
-}
-
-// Clean up transition data
-delete particles.userData.fromPositions;
-delete particles.userData.toPositions;
-delete particles.userData.fromColors;
-delete particles.userData.toColors;
-delete particles.userData.targetPattern;
-isTransitioning = false;
-transitionProgress = 0;
+    isTransitioning = false;
+    transitionProgress = 0;
 }
 
 function updatePatternName(name, instant = false) {
@@ -404,14 +390,14 @@ el.style.opacity = '1';
         el.style.transition = 'opacity 0.5s ease'; // Re-enable transition for fade-out
         el.style.opacity = '0';
     }
-}, 2500); // Keep visible slightly longer
+}, 3500); // Keep visible slightly longer
 } else {
 el.style.transition = 'opacity 0.5s ease';
 el.style.opacity = '1'; // Fade in
 // Set timeout to fade out
 setTimeout(() => {
     if(el) el.style.opacity = '0';
-}, 2500); // Fade out after 2.5 seconds
+}, 3500); // Fade out after 2.5 seconds
 }
 }
 
@@ -613,27 +599,6 @@ visualFolder.add(params, 'particleSize', 0.1, 10, 0.1).onChange(function(value) 
         particles.material.size = value;
     }
 }).name('Particle Size');
-
-// --- Post-Processing Parameters ---
-if (typeof THREE.EffectComposer !== 'undefined') {
-    const ppFolder = gui.addFolder('Post-Processing');
-    ppFolder.add(params, 'bloomStrength', 0, 3, 0.05).onChange(function(value) {
-        if (bloomPass) bloomPass.strength = value;
-    }).name('Bloom Strength');
-
-    ppFolder.add(params, 'bloomRadius', 0, 1, 0.01).onChange(function(value) {
-        if (bloomPass) bloomPass.radius = value;
-    }).name('Bloom Radius');
-
-    ppFolder.add(params, 'bloomThreshold', 0, 1, 0.01).onChange(function(value) {
-        if (bloomPass) bloomPass.threshold = value;
-    }).name('Bloom Threshold');
-
-    ppFolder.add(params, 'blurAmount', 0, 5, 0.1).onChange(function(value) {
-        if (blurPass) blurPass.uniforms.h.value = value / window.innerWidth;
-        if (verticalBlurPass) verticalBlurPass.uniforms.v.value = value / window.innerHeight;
-    }).name('Blur Amount');
-}
 
 // --- Pattern Controls ---
 gui.add(params, 'changePattern').name('Next Pattern');
