@@ -590,6 +590,7 @@ const animFolder = gui.addFolder('Animation');
 // Remove cameraSpeed option since we're not using default camera movement
 animFolder.add(params, 'waveIntensity', 0, 1, 0.05).name('Wave Intensity');
 animFolder.add(params, 'transitionSpeed', 0.001, 0.05, 0.001).name('Transition Speed');
+animFolder.open();
 
 // --- Visual Parameters ---
 const visualFolder = gui.addFolder('Visual');
@@ -598,6 +599,7 @@ visualFolder.add(params, 'particleSize', 0.1, 10, 0.1).onChange(function(value) 
         particles.material.size = value;
     }
 }).name('Particle Size');
+visualFolder.open();
 
 // --- Pattern Controls ---
 gui.add(params, 'changePattern').name('Next Pattern');
