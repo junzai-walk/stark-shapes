@@ -5,37 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cosmic Particles Visualization</title>
   <link rel="stylesheet" href="styles.css">
-  <!-- Add styles for video/canvas elements -->
-  <style>
-    .input_video {
-      /* Make video visible and position top-left */
-      display: block; /* Changed from none */
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      width: 240px; /* Smaller size */
-      height: 135px; /* Maintain 16:9 ratio */
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      z-index: 101; /* Ensure it's above the main canvas slightly */
-       transform: scaleX(-1); /* Mirror flip */
-    }
-    .output_canvas {
-       /* Make canvas visible and position over video */
-      display: block; /* Changed from none */
-      position: fixed;
-      top: 10px;
-      left: 10px; /* Position exactly over video */
-      width: 240px;
-      height: 135px;
-      z-index: 102; /* Above video */
-      pointer-events: none; /* Allow clicks to go through */
-       transform: scaleX(-1); /* Mirror flip to match video */
-    }
-    /* Ensure dat.gui is above the video feed */
-    .dg.ac {
-        z-index: 1000 !important;
-    }
-  </style>
 </head>
 <body>
   <!-- Video and canvas elements for MediaPipe -->
@@ -47,8 +16,9 @@
   <div id="patternName">Cosmic Sphere</div>
   <!-- Updated instructions -->
   <div id="instructions">
-    Left Hand: Pinch=Zoom, Swipe Right=Next Pattern.<br>
-    Right Hand: Rotate to Orbit Camera.<br>
+    Left Hand: Pinch=Zoom<br>
+    Right Hand: Rotate to Orbit Camera<br>
+    Either Hand: Quick push toward camera = Next Pattern<br>
     (Allow webcam access)
   </div>
 
