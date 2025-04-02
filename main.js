@@ -291,20 +291,7 @@ console.error("Output canvas element not found!");
 }
 // ---
 
-updateInstructions(); // Update the instructions display
 setupHandTracking(); // Setup hand tracking last
-}
-
-// Function to update instructions (check this matches HTML/intended controls)
-function updateInstructions() {
-  const instructionsElement = document.getElementById('instructions');
-  if (instructionsElement) {
-    instructionsElement.innerHTML =
-      "Left Hand: Pinch=Zoom<br>" +
-      "Right Hand: Rotate to Orbit Camera<br>" +
-      "Clap Hands Together = Next Pattern<br>" + // Ensure this is still the intended control
-      "(Allow webcam access)";
-  }
 }
 
 // --- WINDOW RESIZE ---
