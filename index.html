@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosmic Particles Visualization</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Add styles for video/canvas elements -->
+  <style>
+    .input_video {
+      display: none; /* Hide the video element */
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      width: 320px;
+      height: 180px;
+      border: 1px solid grey;
+    }
+    .output_canvas {
+      display: none; /* Hide the canvas element */
+      position: fixed;
+      bottom: 10px;
+      left: 10px; /* Position over video if shown */
+      width: 320px;
+      height: 180px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Add video and canvas elements for MediaPipe -->
+  <video class="input_video"></video>
+  <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+
+  <div id="container"></div>
+  <div class="glow"></div>
+  <div id="patternName">Cosmic Sphere</div>
+  <!-- Add simple instructions for hand control -->
+  <div id="instructions">
+      Raise/Lower hand to Zoom Out/In.<br>
+      Point index finger up to change pattern.<br>
+      (Allow webcam access)
+  </div>
+
+
+  <!-- Core libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- MediaPipe Hand Tracking -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <!-- Post-processing libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/shaders/CopyShader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/shaders/LuminosityHighPassShader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/shaders/HorizontalBlurShader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/shaders/VerticalBlurShader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/postprocessing/ShaderPass.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+  <!-- Main script -->
+  <script src="main.js"></script>
+</body>
+</html>
