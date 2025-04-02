@@ -8,36 +8,47 @@
   <!-- Add styles for video/canvas elements -->
   <style>
     .input_video {
-      display: none; /* Hide the video element */
+      /* Make video visible and position top-left */
+      display: block; /* Changed from none */
       position: fixed;
-      bottom: 10px;
+      top: 10px;
       left: 10px;
-      width: 320px;
-      height: 180px;
-      border: 1px solid grey;
+      width: 240px; /* Smaller size */
+      height: 135px; /* Maintain 16:9 ratio */
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      z-index: 101; /* Ensure it's above the main canvas slightly */
+       transform: scaleX(-1); /* Mirror flip */
     }
     .output_canvas {
-      display: none; /* Hide the canvas element */
+       /* Make canvas visible and position over video */
+      display: block; /* Changed from none */
       position: fixed;
-      bottom: 10px;
-      left: 10px; /* Position over video if shown */
-      width: 320px;
-      height: 180px;
+      top: 10px;
+      left: 10px; /* Position exactly over video */
+      width: 240px;
+      height: 135px;
+      z-index: 102; /* Above video */
+      pointer-events: none; /* Allow clicks to go through */
+       transform: scaleX(-1); /* Mirror flip to match video */
+    }
+    /* Ensure dat.gui is above the video feed */
+    .dg.ac {
+        z-index: 1000 !important;
     }
   </style>
 </head>
 <body>
-  <!-- Add video and canvas elements for MediaPipe -->
+  <!-- Video and canvas elements for MediaPipe -->
   <video class="input_video"></video>
-  <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+  <canvas class="output_canvas" width="640px" height="360px"></canvas> <!-- Use internal resolution -->
 
   <div id="container"></div>
   <div class="glow"></div>
   <div id="patternName">Cosmic Sphere</div>
-  <!-- Add simple instructions for hand control -->
+  <!-- Updated instructions -->
   <div id="instructions">
-      Raise/Lower hand to Zoom Out/In.<br>
-      Point index finger up to change pattern.<br>
+      Pinch fingers to Zoom In/Out.<br>
+      Swipe hand Right to change pattern.<br>
       (Allow webcam access)
   </div>
 

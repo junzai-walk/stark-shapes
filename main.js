@@ -1,12 +1,23 @@
-// --- START: Added Hand Tracking Variables ---
+// --- START: Updated Hand Tracking Variables ---
 let hands;
 let handDetected = false;
 let targetCameraZ = 100; // Target Z position for smooth zoom
-const MIN_CAMERA_Z = 40;
-const MAX_CAMERA_Z = 250;
+const MIN_CAMERA_Z = 35;  // Zoom in closer
+const MAX_CAMERA_Z = 220; // Zoom out farther
+const MIN_PINCH_DIST = 0.02; // Min distance between thumb/index for zoom mapping
+const MAX_PINCH_DIST = 0.2;  // Max distance ""
 let lastPatternChangeTime = 0;
-const patternChangeCooldown = 2000; // Milliseconds cooldown for pattern change
-// --- END: Added Hand Tracking Variables ---
+const patternChangeCooldown = 1500; // Cooldown for pattern change (milliseconds)
+
+// Swipe Detection Variables
+let lastHandX = null;           // Previous frame's hand X position (wrist)
+let swipeAccumulatedDistance = 0; // Accumulated rightward distance
+const swipeTriggerDistance = 0.2; // How far (normalized screen width) to swipe right
+const swipeResetThreshold = -0.01; // If hand moves left this much, reset swipe
+
+// References for drawing
+let canvasCtx, canvasElement, videoElement;
+// --- END: Updated Hand Tracking Variables ---
 
 
 // Initialize variables
@@ -36,8 +47,7 @@ const params = {
 
 const patternNames = ["Cosmic Sphere", "Spiral Nebula", "Quantum Helix", "Stardust Grid", "Celestial Torus"];
 
-// --- PATTERN FUNCTIONS (Sphere, Spiral, Grid, Helix, Torus) ---
-// ... (keep existing pattern functions) ...
+// --- PATTERN FUNCTIONS ---
 function createSphere(i, count) {
     const t = i / count;
     const phi = Math.acos(2 * t - 1);
@@ -114,7 +124,6 @@ function createTorus(i, count) {
 const patterns = [createSphere, createSpiral, createHelix, createGrid, createTorus];
 
 // --- PARTICLE TEXTURE ---
-// ... (keep existing function) ...
 function createParticleTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
@@ -144,7 +153,6 @@ function createParticleTexture() {
 }
 
 // --- COLOR PALETTES ---
-// ... (keep existing palettes) ...
 const colorPalettes = [
     [ new THREE.Color(0x0077ff), new THREE.Color(0x00aaff), new THREE.Color(0x44ccff), new THREE.Color(0x0055cc) ],
     [ new THREE.Color(0x8800cc), new THREE.Color(0xcc00ff), new THREE.Color(0x660099), new THREE.Color(0xaa33ff) ],
@@ -154,7 +162,6 @@ const colorPalettes = [
 ];
 
 // --- PARTICLE SYSTEM ---
-// ... (keep existing function) ...
 function createParticleSystem() {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(params.particleCount * 3);
@@ -205,12 +212,10 @@ function createParticleSystem() {
     return new THREE.Points(geometry, material);
 }
 
-
 // --- POST PROCESSING ---
-// ... (keep existing function) ...
 function initPostProcessing() {
     // Check if THREE objects exist before using them
-    if (typeof THREE.EffectComposer === 'undefined' ||
+    if (typeof THREE === 'undefined' || typeof THREE.EffectComposer === 'undefined' ||
         typeof THREE.RenderPass === 'undefined' ||
         typeof THREE.UnrealBloomPass === 'undefined' ||
         typeof THREE.ShaderPass === 'undefined' ||
@@ -262,43 +267,41 @@ function initPostProcessing() {
 function init() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1500);
-    // camera.position.z = 100; // Initial position set via targetCameraZ now
-    camera.position.z = targetCameraZ;
-
+    camera.position.z = targetCameraZ; // Use target Z for initial position
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    // renderer.setClearColor(0x000000, 0); // Make background transparent if using CSS background
 
     const container = document.getElementById('container');
     if (container) {
         container.appendChild(renderer.domElement);
     } else {
         console.error("HTML element with id 'container' not found!");
-        return; // Stop initialization if container is missing
+        return;
     }
 
     particles = createParticleSystem();
     scene.add(particles);
-
-    // Initialize post-processing
-    initPostProcessing(); // Call after renderer is created
-
-    // Add event listeners
+    initPostProcessing();
     window.addEventListener('resize', onWindowResize);
+    initGUI();
+    updatePatternName(patternNames[currentPattern], true);
 
-    initGUI(); // Initialize dat.GUI controls
-    updatePatternName(patternNames[currentPattern], true); // Show initial pattern name instantly
+    // --- Get references for drawing ---
+    videoElement = document.querySelector('.input_video');
+    canvasElement = document.querySelector('.output_canvas');
+    if (canvasElement) {
+        canvasCtx = canvasElement.getContext('2d');
+    } else {
+        console.error("Output canvas element not found!");
+    }
+    // ---
 
-    // --- START: Added Hand Tracking Setup Call ---
-    setupHandTracking();
-    // --- END: Added Hand Tracking Setup Call ---
+    setupHandTracking(); // Setup hand tracking last
 }
 
-
 // --- WINDOW RESIZE ---
-// ... (keep existing function) ...
 function onWindowResize() {
     if (!camera || !renderer) return;
 
@@ -319,11 +322,17 @@ function onWindowResize() {
     if (verticalBlurPass) { // Use the stored reference
         verticalBlurPass.uniforms.v.value = params.blurAmount / window.innerHeight;
     }
+
+    // Optional: Resize the debug canvas if layout changes significantly
+    // if (canvasElement && videoElement) {
+    //    // Match CSS size if fixed, or use video dimensions if dynamic
+    //    canvasElement.width = canvasElement.clientWidth; // Or videoElement.videoWidth if intrinsic size is better
+    //    canvasElement.height = canvasElement.clientHeight; // Or videoElement.videoHeight
+    // }
 }
 
 
 // --- PATTERN CHANGE / TRANSITION ---
-// ... (keep existing functions: forcePatternChange, completeCurrentTransition, updatePatternName, transitionToPattern) ...
 function forcePatternChange() {
     if (isTransitioning) {
         completeCurrentTransition(); // Finish current transition instantly
@@ -334,14 +343,17 @@ function forcePatternChange() {
 }
 
 function completeCurrentTransition() {
-    if (!isTransitioning || !particles || !particles.userData.toPositions || !particles.userData.toColors) {
-        // Clear transition state if data is missing
+    if (!isTransitioning || !particles || !particles.geometry || !particles.userData.toPositions || !particles.userData.toColors) {
+        // Clear transition state if data is missing or geometry invalid
         isTransitioning = false;
         transitionProgress = 0;
-        delete particles?.userData?.fromPositions;
-        delete particles?.userData?.toPositions;
-        delete particles?.userData?.fromColors;
-        delete particles?.userData?.toColors;
+        if (particles && particles.userData) {
+            delete particles.userData.fromPositions;
+            delete particles.userData.toPositions;
+            delete particles.userData.fromColors;
+            delete particles.userData.toColors;
+            delete particles.userData.targetPattern;
+        }
         return;
     }
 
@@ -349,16 +361,18 @@ function completeCurrentTransition() {
     const colors = particles.geometry.attributes.color.array;
 
     // Ensure arrays are valid before setting
-    if (positions.length === particles.userData.toPositions.length &&
+    if (positions && colors &&
+        particles.userData.toPositions && particles.userData.toColors &&
+        positions.length === particles.userData.toPositions.length &&
         colors.length === particles.userData.toColors.length) {
-        positions.set(particles.userData.toPositions);
-        colors.set(particles.userData.toColors);
-        particles.geometry.userData.currentColors = new Float32Array(particles.userData.toColors); // Update stored colors
-        particles.geometry.attributes.position.needsUpdate = true;
-        particles.geometry.attributes.color.needsUpdate = true;
-        currentPattern = particles.userData.targetPattern; // Update current pattern index
+            positions.set(particles.userData.toPositions);
+            colors.set(particles.userData.toColors);
+            particles.geometry.userData.currentColors = new Float32Array(particles.userData.toColors); // Update stored colors
+            particles.geometry.attributes.position.needsUpdate = true;
+            particles.geometry.attributes.color.needsUpdate = true;
+            currentPattern = particles.userData.targetPattern; // Update current pattern index
     } else {
-      console.error("Transition data length mismatch on completion!");
+      console.error("Transition data length mismatch or invalid data on completion!");
     }
 
     // Clean up transition data
@@ -370,7 +384,6 @@ function completeCurrentTransition() {
     isTransitioning = false;
     transitionProgress = 0;
 }
-
 
 function updatePatternName(name, instant = false) {
     const el = document.getElementById('patternName');
@@ -395,7 +408,6 @@ function updatePatternName(name, instant = false) {
         }, 2500); // Fade out after 2.5 seconds
     }
 }
-
 
 function transitionToPattern(newPattern) {
     if (!particles || !particles.geometry || !particles.geometry.attributes.position) return;
@@ -446,34 +458,37 @@ function transitionToPattern(newPattern) {
 }
 
 
+// --- Helper function to map a value from one range to another ---
+function mapRange(value, inMin, inMax, outMin, outMax) {
+  // Clamp value to input range
+  value = Math.max(inMin, Math.min(inMax, value));
+  return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+}
+
+
 const clock = new THREE.Clock();
 
 // --- ANIMATION LOOP ---
 function animate() {
     requestAnimationFrame(animate);
-    if (!renderer || !camera || !scene) return; // Check if core components exist
+    if (!renderer || !camera || !scene) return;
 
     const deltaTime = clock.getDelta();
-    time += deltaTime; // Update global time
+    time += deltaTime;
 
     // --- Particle Update ---
-    // ... (keep existing particle update logic, including transitions) ...
     if (particles && particles.geometry && particles.geometry.attributes.position) {
         const positions = particles.geometry.attributes.position.array;
         const count = params.particleCount;
 
-        //Apply wave motion (if not transitioning)
-        //Removed wave motion during transition for smoother effect
+        // Apply wave motion (if not transitioning)
         if (!isTransitioning) {
             for (let i = 0; i < count; i++) {
                 const idx = i * 3;
                 const noise1 = Math.sin(time * 0.5 + i * 0.01) * params.waveIntensity;
                 const noise2 = Math.cos(time * 0.3 + i * 0.02) * params.waveIntensity;
-                // Apply noise only if not transitioning
-                positions[idx] += noise1 * deltaTime * 5; // Scale by deltaTime for frame rate independence
+                positions[idx] += noise1 * deltaTime * 5;
                 positions[idx + 1] += noise2 * deltaTime * 5;
-                // Keep Z noise minimal or remove if it interferes with shape
-                // positions[idx + 2] += noise3 * deltaTime * 5;
             }
             particles.geometry.attributes.position.needsUpdate = true;
         }
@@ -492,10 +507,9 @@ function animate() {
                 const fromCol = particles.userData.fromColors;
                 const toCol = particles.userData.toColors;
                 const t = transitionProgress;
-                // Ease-in-out cubic easing function
                 const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-                // Check array lengths before interpolation (safety check)
+                // Check array lengths before interpolation
                 if (fromPos.length === positions.length && toPos.length === positions.length &&
                     fromCol.length === colors.length && toCol.length === colors.length) {
 
@@ -513,8 +527,7 @@ function animate() {
 
                     particles.geometry.attributes.position.needsUpdate = true;
                     particles.geometry.attributes.color.needsUpdate = true;
-                    // Keep currentColors updated during transition for potential restarts
-                     particles.geometry.userData.currentColors = new Float32Array(colors);
+                    particles.geometry.userData.currentColors = new Float32Array(colors); // Update during transition
 
                 } else {
                     console.error("Transition data length mismatch during interpolation!");
@@ -526,38 +539,32 @@ function animate() {
 
 
     // --- Camera Movement ---
-    // Base rotation still happens, but Z position (zoom) is controlled by hand / targetCameraZ
-    const baseRadius = 100; // Use a base radius for X/Z orbit calculation
-    // const radiusVariation = Math.sin(time * 0.1) * 15; // Remove time-based radius variation
-    // const cameraRadius = baseRadius + radiusVariation; // Use baseRadius for orbit X/Z
     const angleX = time * params.cameraSpeed;
-    const angleY = time * (params.cameraSpeed * 0.75); // Slower vertical oscillation
+    const angleY = time * (params.cameraSpeed * 0.75);
 
-    // --- START: Modified Camera Logic ---
-    // Smoothly interpolate current camera Z towards the target Z set by hand tracking
-    const zoomSpeed = 0.05; // Adjust for faster/slower zoom transition
-    camera.position.z += (targetCameraZ - camera.position.z) * zoomSpeed;
+    // Smoothly interpolate current camera Z towards the target Z
+    const zoomSpeed = 0.06; // Adjust for responsiveness
+    if (camera) { // Check if camera exists
+        camera.position.z += (targetCameraZ - camera.position.z) * zoomSpeed;
 
-    // Update X position based on the *current* Z distance to maintain orbit perspective
-    camera.position.x = Math.cos(angleX) * camera.position.z; // Use current Z for X calc
-    // Keep Y oscillation independent of zoom for now
-    camera.position.y = Math.sin(angleY) * 35 + 5;
-    // Z position is now managed by interpolation towards targetCameraZ
+        // Update X/Y based on the *current* Z distance
+        const effectiveRadius = Math.max(camera.position.z, 1.0); // Prevent radius going to zero/negative
+        camera.position.x = Math.cos(angleX) * effectiveRadius;
+        camera.position.y = Math.sin(angleY) * (effectiveRadius * 0.35) + 5; // Scale Y oscillation with zoom too
 
-    camera.lookAt(0, 0, 0); // Always look at the center
-    // --- END: Modified Camera Logic ---
+        camera.lookAt(0, 0, 0);
+    }
 
 
     // --- Rendering ---
     if (composer) {
         composer.render(deltaTime);
-    } else {
+    } else if (renderer && scene && camera) { // Check before rendering
         renderer.render(scene, camera);
     }
 }
 
 // --- DAT.GUI ---
-// ... (keep existing function) ...
 function initGUI() {
     // Check if dat exists
     if (typeof dat === 'undefined') {
@@ -575,7 +582,6 @@ function initGUI() {
         animFolder.add(params, 'cameraSpeed', 0.01, 0.5, 0.005).name('Camera Speed');
         animFolder.add(params, 'waveIntensity', 0, 1, 0.05).name('Wave Intensity');
         animFolder.add(params, 'transitionSpeed', 0.001, 0.05, 0.001).name('Transition Speed');
-        // animFolder.open(); // Keep closed by default
 
         // --- Visual Parameters ---
         const visualFolder = gui.addFolder('Visual');
@@ -584,10 +590,8 @@ function initGUI() {
                 particles.material.size = value;
             }
         }).name('Particle Size');
-        // visualFolder.open(); // Keep closed by default
 
         // --- Post-Processing Parameters ---
-        // Only add if post-processing is potentially active
         if (typeof THREE.EffectComposer !== 'undefined') {
             const ppFolder = gui.addFolder('Post-Processing');
             ppFolder.add(params, 'bloomStrength', 0, 3, 0.05).onChange(function(value) {
@@ -606,15 +610,13 @@ function initGUI() {
                 if (blurPass) blurPass.uniforms.h.value = value / window.innerWidth;
                 if (verticalBlurPass) verticalBlurPass.uniforms.v.value = value / window.innerHeight;
             }).name('Blur Amount');
-            // ppFolder.open(); // Keep closed by default
         }
-
 
         // --- Pattern Controls ---
         gui.add(params, 'changePattern').name('Next Pattern');
 
         // Add GUI styling (optional)
-        const guiElement = document.querySelector('.dg.ac'); // Main GUI container
+        const guiElement = document.querySelector('.dg.ac');
         if (guiElement) {
             guiElement.style.zIndex = "1000"; // Ensure GUI is above other elements
         }
@@ -627,132 +629,185 @@ function initGUI() {
 }
 
 
-// --- START: Added Hand Tracking Functions ---
+// --- START: Updated Hand Tracking Functions ---
 
 function onResults(results) {
-    // Optional: Draw landmarks for debugging
-    // const canvasCtx = document.querySelector('.output_canvas').getContext('2d');
-    // const canvasElement = document.querySelector('.output_canvas');
-    // canvasCtx.save();
-    // canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-    // // Draw landmarks
-    // if (results.multiHandLandmarks) {
-    //   for (const landmarks of results.multiHandLandmarks) {
-    //     drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
-    //     drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
-    //   }
-    // }
-    // canvasCtx.restore();
+    // Check if drawing context and MediaPipe utils are available
+    if (!canvasCtx || !canvasElement || !videoElement || typeof drawConnectors === 'undefined' || typeof drawLandmarks === 'undefined') {
+        console.warn("Canvas context or MediaPipe drawing utilities not ready.");
+        return;
+    }
+
+    // --- Drawing ---
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+    // Draw the video frame mirrored onto the canvas if image data exists
+    if (results.image) {
+         canvasCtx.drawImage(
+            results.image, 0, 0, canvasElement.width, canvasElement.height);
+    } else {
+        // If no image (e.g., during startup), clear rect might be enough
+         // console.warn("No image data in MediaPipe results.");
+    }
+
 
     handDetected = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
 
     if (handDetected) {
         const landmarks = results.multiHandLandmarks[0]; // Use the first detected hand
 
-        // --- Zoom Control (Vertical Position) ---
-        // Use wrist or palm base landmark Y coordinate (0 = top, 1 = bottom)
-        const wristY = landmarks[0].y; // Landmark 0 is WRIST
-        // Map the Y coordinate (0 to 1) to the camera Z range
-        // Invert Y because lower hand means closer (smaller Z)
-        targetCameraZ = MIN_CAMERA_Z + (1 - wristY) * (MAX_CAMERA_Z - MIN_CAMERA_Z);
-        // Clamp the value to the defined range
-        targetCameraZ = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, targetCameraZ));
+        // --- Draw Landmarks ---
+        // Ensure landmarks exist before drawing
+        if (landmarks) {
+            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+            drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+        }
+        // ---
 
+        // --- Pinch-to-Zoom ---
+        if (landmarks && landmarks[4] && landmarks[8]) { // Check required landmarks exist
+            const thumbTip = landmarks[4];  // THUMB_TIP
+            const indexTip = landmarks[8];  // INDEX_FINGER_TIP
 
-        // --- Pattern Change Gesture (Index Finger Pointing Up) ---
-        const now = Date.now();
-        if (now > lastPatternChangeTime + patternChangeCooldown) {
-            const indexTip = landmarks[8]; // INDEX_FINGER_TIP
-            const indexPip = landmarks[6]; // INDEX_FINGER_PIP
-            const middleTip = landmarks[12]; // MIDDLE_FINGER_TIP
-            const ringTip = landmarks[16]; // RING_FINGER_TIP
-            const pinkyTip = landmarks[20]; // PINKY_TIP
+            // Calculate 2D distance (normalized screen coords)
+            const dx = thumbTip.x - indexTip.x;
+            const dy = thumbTip.y - indexTip.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
-            // Check if index finger tip is significantly higher (lower Y value) than its own PIP joint
-            // and also higher than the tips of the other non-thumb fingers.
-            const isPointingUp =
-                indexTip.y < indexPip.y - 0.05 && // Index tip above PIP
-                indexTip.y < middleTip.y - 0.03 && // Index tip above middle tip
-                indexTip.y < ringTip.y - 0.03 &&   // Index tip above ring tip
-                indexTip.y < pinkyTip.y - 0.03;   // Index tip above pinky tip
-
-            if (isPointingUp) {
-                console.log("Pattern Change Gesture Detected!");
-                forcePatternChange();
-                lastPatternChangeTime = now; // Reset cooldown timer
-            }
+            // Map distance to camera Z (larger distance = larger Z = zoom out)
+            targetCameraZ = mapRange(distance, MIN_PINCH_DIST, MAX_PINCH_DIST, MIN_CAMERA_Z, MAX_CAMERA_Z);
+            // Clamp just in case mapRange output is slightly off due to input clamping
+            targetCameraZ = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, targetCameraZ));
         }
 
+
+        // --- Swipe Detection ---
+        if (landmarks && landmarks[0]) { // Check wrist landmark exists
+            const now = Date.now();
+            const wristX = landmarks[0].x; // Use wrist X for horizontal position
+
+            if (lastHandX !== null) {
+                const deltaX = wristX - lastHandX; // Check movement since last frame
+
+                // Accumulate rightward movement
+                if (deltaX > 0) { // Moving right
+                    swipeAccumulatedDistance += deltaX;
+                }
+                // Reset if moving left significantly
+                else if (deltaX < swipeResetThreshold) {
+                    swipeAccumulatedDistance = 0;
+                }
+
+                // Check if swipe trigger distance is met
+                if (swipeAccumulatedDistance > swipeTriggerDistance && now > lastPatternChangeTime + patternChangeCooldown) {
+                     console.log("Swipe Right Detected!");
+                     forcePatternChange();
+                     lastPatternChangeTime = now; // Reset cooldown timer
+                     swipeAccumulatedDistance = 0; // Reset swipe distance after triggering
+                     lastHandX = null; // Force reset next frame to avoid re-trigger
+                }
+            }
+             // Update last known X position only if not just swiped
+             if (swipeAccumulatedDistance < swipeTriggerDistance) {
+                lastHandX = wristX;
+            }
+        } else {
+             // Reset swipe if landmarks disappear mid-swipe
+             lastHandX = null;
+             swipeAccumulatedDistance = 0;
+        }
+
+
     } else {
-        // Optional: Slowly drift back to default zoom if no hand is detected
-        // targetCameraZ = 100;
+        // No hand detected
+        lastHandX = null;
+        swipeAccumulatedDistance = 0;
+        // Optional: Smoothly return to a default zoom?
+        // targetCameraZ = mapRange(MAX_PINCH_DIST * 0.8, MIN_PINCH_DIST, MAX_PINCH_DIST, MIN_CAMERA_Z, MAX_CAMERA_Z); // Drift towards zoomed-out view
     }
+
+    canvasCtx.restore(); // Restore canvas context
 }
 
 function setupHandTracking() {
-    const videoElement = document.querySelector('.input_video');
-    // const canvasElement = document.querySelector('.output_canvas');
-    // const canvasCtx = canvasElement.getContext('2d');
+    // Video and canvas elements are assigned in init()
 
-    // Check if MediaPipe components are loaded
-    if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
-        console.error("MediaPipe Hands or Camera library not found. Skipping hand tracking setup.");
+    if (!videoElement || !canvasElement || !canvasCtx) {
+        console.error("Video or Canvas element not ready for Hand Tracking setup.");
+        return;
+    }
+
+    if (typeof Hands === 'undefined' || typeof Camera === 'undefined' || typeof drawConnectors === 'undefined' || typeof drawLandmarks === 'undefined') {
+        console.error("MediaPipe Hands/Camera/Drawing library not found. Skipping hand tracking setup.");
         const instructions = document.getElementById('instructions');
         if(instructions) instructions.textContent = "Hand tracking library failed to load.";
         return;
     }
 
-    hands = new Hands({locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-    }});
+    try {
+        hands = new Hands({locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
 
-    hands.setOptions({
-      maxNumHands: 1, // Detect only one hand for simplicity
-      modelComplexity: 1, // 0, 1, or 2. Higher = more accurate but slower.
-      minDetectionConfidence: 0.6, // Increased confidence
-      minTrackingConfidence: 0.6
-    });
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.6, // Adjusted confidence
+          minTrackingConfidence: 0.6
+        });
 
-    hands.onResults(onResults);
+        hands.onResults(onResults);
 
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await hands.send({image: videoElement});
-      },
-      width: 640, // Lower resolution for better performance
-      height: 360
-    });
+        const camera = new Camera(videoElement, {
+          onFrame: async () => {
+            // Ensure video is playing before sending frames
+            if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA or more
+               await hands.send({image: videoElement});
+            }
+          },
+          width: 640, // Internal processing resolution
+          height: 360
+        });
 
-    camera.start()
-      .catch(err => {
-          console.error("Error starting webcam:", err);
-          const instructions = document.getElementById('instructions');
-          if(instructions) instructions.textContent = "Could not access webcam. Please grant permission.";
-      });
+        camera.start()
+          .then(() => console.log("Camera started successfully."))
+          .catch(err => {
+              console.error("Error starting webcam:", err);
+              const instructions = document.getElementById('instructions');
+              if(instructions) instructions.textContent = "Could not access webcam. Please grant permission and reload.";
+          });
 
-    console.log("Hand tracking setup complete.");
+        console.log("Hand tracking setup complete.");
+
+    } catch (error) {
+        console.error("Error setting up MediaPipe Hands:", error);
+        const instructions = document.getElementById('instructions');
+        if(instructions) instructions.textContent = "Error initializing hand tracking.";
+    }
 }
-// --- END: Added Hand Tracking Functions ---
+// --- END: Updated Hand Tracking Functions ---
 
 
 function startExperience() {
-    // Check for essential THREE object
     if (typeof THREE === 'undefined') {
         console.error("THREE.js core library not found!");
-        alert("Error: THREE.js library failed to load. Please check your network connection or the script inclusions.");
+        alert("Error: THREE.js library failed to load.");
         return;
     }
-    init(); // Initialize scene, renderer, etc.
-    if (renderer) { // Only start animation if renderer was successfully created
-        animate(); // Start the animation loop
+    init();
+    if (renderer) {
+        animate();
     } else {
          console.error("Renderer initialization failed. Animation cannot start.");
     }
 }
 
 // --- Start Execution ---
+// Use DOMContentLoaded to ensure HTML is parsed and elements are available
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', startExperience);
 } else {
+    // DOMContentLoaded has already fired
     startExperience();
 }
