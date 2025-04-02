@@ -1,19 +1,31 @@
 // --- START: Updated Hand Tracking Variables ---
 let hands;
-let handDetected = false;
-let targetCameraZ = 100; // Target Z position for smooth zoom
-const MIN_CAMERA_Z = 35;  // Zoom in closer
-const MAX_CAMERA_Z = 220; // Zoom out farther
-const MIN_PINCH_DIST = 0.02; // Min distance between thumb/index for zoom mapping
-const MAX_PINCH_DIST = 0.2;  // Max distance ""
-let lastPatternChangeTime = 0;
-const patternChangeCooldown = 1500; // Cooldown for pattern change (milliseconds)
+let handDetected = false; // Flag if *any* hand is detected
+let isLeftHandPresent = false;
+let isRightHandPresent = false;
+let leftHandLandmarks = null;
+let rightHandLandmarks = null;
 
-// Swipe Detection Variables
-let lastHandX = null;           // Previous frame's hand X position (wrist)
-let swipeAccumulatedDistance = 0; // Accumulated rightward distance
-const swipeTriggerDistance = 0.2; // How far (normalized screen width) to swipe right
-const swipeResetThreshold = -0.01; // If hand moves left this much, reset swipe
+let targetCameraZ = 100; // Target Z position for smooth zoom
+const MIN_CAMERA_Z = 35;
+const MAX_CAMERA_Z = 220;
+const MIN_PINCH_DIST = 0.02;
+const MAX_PINCH_DIST = 0.2;
+
+let lastPatternChangeTime = 0;
+const patternChangeCooldown = 1500;
+
+// Swipe Detection Variables (associated with Left Hand)
+let lastLeftHandX = null;
+let swipeAccumulatedDistance = 0;
+const swipeTriggerDistance = 0.2;
+const swipeResetThreshold = 0.01; // If hand moves left (positive deltaX in mirrored view) this much, reset swipe
+
+// Rotation Control Variables (associated with Right Hand)
+let targetCameraAngleX = 0;   // Target horizontal rotation angle (radians)
+let currentCameraAngleX = 0; // Current smoothed horizontal rotation angle
+const rotationSensitivity = 2.5; // Multiplier for hand rotation effect
+const rotationSmoothing = 0.08; // Smoothing factor for rotation (lower = smoother)
 
 // References for drawing
 let canvasCtx, canvasElement, videoElement;
@@ -31,18 +43,18 @@ let gui;
 
 // Animation parameters (configurable via dat.gui)
 const params = {
-  particleCount: 25000,
-  transitionSpeed: 0.015,
-  cameraSpeed: 0.08,
-  waveIntensity: 0.2,
-  particleSize: 3.0,
-  bloomStrength: 1.5,
-  bloomRadius: 0.75,
-  bloomThreshold: 0.2,
-  blurAmount: 2.0,
-  changePattern: function() {
-    forcePatternChange();
-  }
+    particleCount: 25000,
+    transitionSpeed: 0.015,
+    cameraSpeed: 0.08, // Default speed when right hand is not controlling
+    waveIntensity: 0.2,
+    particleSize: 3.0,
+    bloomStrength: 1.5,
+    bloomRadius: 0.75,
+    bloomThreshold: 0.2,
+    blurAmount: 2.0,
+    changePattern: function() {
+        forcePatternChange();
+    }
 };
 
 const patternNames = ["Cosmic Sphere", "Spiral Nebula", "Quantum Helix", "Stardust Grid", "Celestial Torus"];
@@ -212,6 +224,7 @@ function createParticleSystem() {
     return new THREE.Points(geometry, material);
 }
 
+
 // --- POST PROCESSING ---
 function initPostProcessing() {
     // Check if THREE objects exist before using them
@@ -267,7 +280,7 @@ function initPostProcessing() {
 function init() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1500);
-    camera.position.z = targetCameraZ; // Use target Z for initial position
+    camera.position.z = targetCameraZ;
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -322,13 +335,6 @@ function onWindowResize() {
     if (verticalBlurPass) { // Use the stored reference
         verticalBlurPass.uniforms.v.value = params.blurAmount / window.innerHeight;
     }
-
-    // Optional: Resize the debug canvas if layout changes significantly
-    // if (canvasElement && videoElement) {
-    //    // Match CSS size if fixed, or use video dimensions if dynamic
-    //    canvasElement.width = canvasElement.clientWidth; // Or videoElement.videoWidth if intrinsic size is better
-    //    canvasElement.height = canvasElement.clientHeight; // Or videoElement.videoHeight
-    // }
 }
 
 
@@ -465,7 +471,6 @@ function mapRange(value, inMin, inMax, outMin, outMax) {
   return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
 }
 
-
 const clock = new THREE.Clock();
 
 // --- ANIMATION LOOP ---
@@ -474,7 +479,7 @@ function animate() {
     if (!renderer || !camera || !scene) return;
 
     const deltaTime = clock.getDelta();
-    time += deltaTime;
+    time += deltaTime; // Keep time updating for other potential uses
 
     // --- Particle Update ---
     if (particles && particles.geometry && particles.geometry.attributes.position) {
@@ -510,7 +515,8 @@ function animate() {
                 const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
                 // Check array lengths before interpolation
-                if (fromPos.length === positions.length && toPos.length === positions.length &&
+                if (positions && colors && fromPos && toPos && fromCol && toCol &&
+                    fromPos.length === positions.length && toPos.length === positions.length &&
                     fromCol.length === colors.length && toCol.length === colors.length) {
 
                     for (let i = 0; i < count; i++) {
@@ -530,7 +536,7 @@ function animate() {
                     particles.geometry.userData.currentColors = new Float32Array(colors); // Update during transition
 
                 } else {
-                    console.error("Transition data length mismatch during interpolation!");
+                    console.error("Transition data length mismatch or invalid data during interpolation!");
                     completeCurrentTransition(); // Attempt to recover by completing
                 }
             }
@@ -539,18 +545,37 @@ function animate() {
 
 
     // --- Camera Movement ---
-    const angleX = time * params.cameraSpeed;
-    const angleY = time * (params.cameraSpeed * 0.75);
+    const angleY = time * (params.cameraSpeed * 0.75); // Keep Y oscillation time-based
 
-    // Smoothly interpolate current camera Z towards the target Z
-    const zoomSpeed = 0.06; // Adjust for responsiveness
-    if (camera) { // Check if camera exists
+    // --- Rotation Control ---
+    if (isRightHandPresent) {
+        // Smoothly interpolate camera angle towards the target set by the right hand
+        // Calculate the shortest angle difference to prevent wrapping issues
+        let deltaAngle = targetCameraAngleX - currentCameraAngleX;
+        while (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
+        while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
+
+        currentCameraAngleX += deltaAngle * rotationSmoothing; // Use smoothing factor
+    } else {
+        // Default time-based rotation if right hand is not detected
+        currentCameraAngleX += params.cameraSpeed * deltaTime;
+    }
+    // Keep angle within 0 to 2*PI range (optional, helps if debugging angle values)
+    // currentCameraAngleX = (currentCameraAngleX + Math.PI * 2) % (Math.PI * 2);
+
+    // --- Zoom Control ---
+    const zoomSpeed = 0.06;
+    if (camera) {
         camera.position.z += (targetCameraZ - camera.position.z) * zoomSpeed;
 
-        // Update X/Y based on the *current* Z distance
-        const effectiveRadius = Math.max(camera.position.z, 1.0); // Prevent radius going to zero/negative
-        camera.position.x = Math.cos(angleX) * effectiveRadius;
-        camera.position.y = Math.sin(angleY) * (effectiveRadius * 0.35) + 5; // Scale Y oscillation with zoom too
+        // --- Update Camera Position using controlled angle and zoom ---
+        const effectiveRadius = Math.max(camera.position.z, 1.0);
+        // Use currentCameraAngleX for X and Z positioning
+        camera.position.x = Math.cos(currentCameraAngleX) * effectiveRadius;
+        camera.position.z = Math.sin(currentCameraAngleX) * effectiveRadius; // Use sin for Z if X is cos
+
+        // Update Y position (can still be time-based or linked to radius)
+        camera.position.y = Math.sin(angleY) * (effectiveRadius * 0.35) + 5;
 
         camera.lookAt(0, 0, 0);
     }
@@ -559,7 +584,7 @@ function animate() {
     // --- Rendering ---
     if (composer) {
         composer.render(deltaTime);
-    } else if (renderer && scene && camera) { // Check before rendering
+    } else if (renderer && scene && camera) {
         renderer.render(scene, camera);
     }
 }
@@ -579,7 +604,7 @@ function initGUI() {
 
         // --- Animation Parameters ---
         const animFolder = gui.addFolder('Animation');
-        animFolder.add(params, 'cameraSpeed', 0.01, 0.5, 0.005).name('Camera Speed');
+        animFolder.add(params, 'cameraSpeed', 0.01, 0.5, 0.005).name('Base Camera Speed');
         animFolder.add(params, 'waveIntensity', 0, 1, 0.05).name('Wave Intensity');
         animFolder.add(params, 'transitionSpeed', 0.001, 0.05, 0.001).name('Transition Speed');
 
@@ -634,112 +659,157 @@ function initGUI() {
 function onResults(results) {
     // Check if drawing context and MediaPipe utils are available
     if (!canvasCtx || !canvasElement || !videoElement || typeof drawConnectors === 'undefined' || typeof drawLandmarks === 'undefined') {
-        console.warn("Canvas context or MediaPipe drawing utilities not ready.");
+        // console.warn("Canvas context or MediaPipe drawing utilities not ready.");
         return;
     }
 
-    // --- Drawing ---
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-    // Draw the video frame mirrored onto the canvas if image data exists
-    if (results.image) {
-         canvasCtx.drawImage(
-            results.image, 0, 0, canvasElement.width, canvasElement.height);
-    } else {
-        // If no image (e.g., during startup), clear rect might be enough
-         // console.warn("No image data in MediaPipe results.");
-    }
-
-
+    // --- Reset Hand States ---
+    isLeftHandPresent = false;
+    isRightHandPresent = false;
+    leftHandLandmarks = null;
+    rightHandLandmarks = null;
     handDetected = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
 
+    // --- Drawing Setup ---
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    if (results.image) {
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+    }
+
+    // --- Process Detected Hands ---
     if (handDetected) {
-        const landmarks = results.multiHandLandmarks[0]; // Use the first detected hand
+        for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+             // Ensure handedness data exists for the current hand index
+             if (!results.multiHandedness || !results.multiHandedness[i]) continue;
 
-        // --- Draw Landmarks ---
-        // Ensure landmarks exist before drawing
-        if (landmarks) {
-            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
-            drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
-        }
-        // ---
+            const classification = results.multiHandedness[i];
+            const landmarks = results.multiHandLandmarks[i];
+            const isLeft = classification.label === 'Left';
 
-        // --- Pinch-to-Zoom ---
-        if (landmarks && landmarks[4] && landmarks[8]) { // Check required landmarks exist
-            const thumbTip = landmarks[4];  // THUMB_TIP
-            const indexTip = landmarks[8];  // INDEX_FINGER_TIP
-
-            // Calculate 2D distance (normalized screen coords)
-            const dx = thumbTip.x - indexTip.x;
-            const dy = thumbTip.y - indexTip.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            // Map distance to camera Z (larger distance = larger Z = zoom out)
-            targetCameraZ = mapRange(distance, MIN_PINCH_DIST, MAX_PINCH_DIST, MIN_CAMERA_Z, MAX_CAMERA_Z);
-            // Clamp just in case mapRange output is slightly off due to input clamping
-            targetCameraZ = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, targetCameraZ));
-        }
-
-
-        // --- Swipe Detection ---
-        if (landmarks && landmarks[0]) { // Check wrist landmark exists
-            const now = Date.now();
-            const wristX = landmarks[0].x; // Use wrist X for horizontal position
-
-            if (lastHandX !== null) {
-                const deltaX = wristX - lastHandX; // Check movement since last frame
-
-                // Accumulate rightward movement
-                if (deltaX > 0) { // Moving right
-                    swipeAccumulatedDistance += deltaX;
-                }
-                // Reset if moving left significantly
-                else if (deltaX < swipeResetThreshold) {
-                    swipeAccumulatedDistance = 0;
-                }
-
-                // Check if swipe trigger distance is met
-                if (swipeAccumulatedDistance > swipeTriggerDistance && now > lastPatternChangeTime + patternChangeCooldown) {
-                     console.log("Swipe Right Detected!");
-                     forcePatternChange();
-                     lastPatternChangeTime = now; // Reset cooldown timer
-                     swipeAccumulatedDistance = 0; // Reset swipe distance after triggering
-                     lastHandX = null; // Force reset next frame to avoid re-trigger
-                }
+            // --- Assign Landmarks based on Handedness ---
+            if (isLeft) {
+                isLeftHandPresent = true;
+                leftHandLandmarks = landmarks;
+            } else { // Right Hand
+                isRightHandPresent = true;
+                rightHandLandmarks = landmarks;
             }
-             // Update last known X position only if not just swiped
-             if (swipeAccumulatedDistance < swipeTriggerDistance) {
-                lastHandX = wristX;
+
+            // --- Draw Landmarks (Color-coded: Green=Left, Blue=Right) ---
+            const color = isLeft ? '#00FF00' : '#0088FF'; // Green lines Left, Blue lines Right
+            const dotColor = isLeft ? '#FF0044' : '#FFFF00'; // Red dots Left, Yellow dots Right
+            if (landmarks) {
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: color, lineWidth: 2 });
+                drawLandmarks(canvasCtx, landmarks, { color: dotColor, lineWidth: 1, radius: 3 });
+            }
+        }
+
+        // --- Left Hand Controls (Pinch Zoom & Swipe) ---
+        if (isLeftHandPresent && leftHandLandmarks) {
+            // Pinch-to-Zoom (using Left Hand)
+            if (leftHandLandmarks[4] && leftHandLandmarks[8]) { // Thumb tip & Index tip
+                const thumbTip = leftHandLandmarks[4];
+                const indexTip = leftHandLandmarks[8];
+                const dx = thumbTip.x - indexTip.x;
+                const dy = thumbTip.y - indexTip.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                targetCameraZ = mapRange(distance, MIN_PINCH_DIST, MAX_PINCH_DIST, MIN_CAMERA_Z, MAX_CAMERA_Z);
+                targetCameraZ = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, targetCameraZ));
+            }
+
+            // Swipe Detection (using Left Hand Wrist)
+            if (leftHandLandmarks[0]) { // Wrist
+                const now = Date.now();
+                const wristX = leftHandLandmarks[0].x;
+
+                // Since the view is mirrored, moving hand right means *decreasing* X
+                 if (lastLeftHandX !== null) {
+                    const deltaX = wristX - lastLeftHandX; // Negative delta means moving right on screen
+
+                    // Check for rightward movement (deltaX should be negative)
+                    if (deltaX < -0.005) { // Threshold for detecting movement right
+                         // Accumulate the *absolute* distance moved right
+                        swipeAccumulatedDistance += Math.abs(deltaX);
+                    }
+                    // Reset if moving left significantly (positive deltaX)
+                    else if (deltaX > swipeResetThreshold) { // Using positive threshold for left move
+                        swipeAccumulatedDistance = 0;
+                    }
+
+                    // Check if swipe trigger distance is met
+                    if (swipeAccumulatedDistance > swipeTriggerDistance && now > lastPatternChangeTime + patternChangeCooldown) {
+                         console.log("Swipe Right Detected!");
+                         forcePatternChange();
+                         lastPatternChangeTime = now;
+                         swipeAccumulatedDistance = 0;
+                         lastLeftHandX = null; // Reset to avoid re-trigger
+                    }
+                }
+                // Update last known X position only if not just swiped
+                 if (swipeAccumulatedDistance < swipeTriggerDistance) {
+                    lastLeftHandX = wristX;
+                }
+            } else {
+                lastLeftHandX = null; // Reset if wrist is lost
+                swipeAccumulatedDistance = 0;
             }
         } else {
-             // Reset swipe if landmarks disappear mid-swipe
-             lastHandX = null;
-             swipeAccumulatedDistance = 0;
+             // Reset left hand state if not present
+            lastLeftHandX = null;
+            swipeAccumulatedDistance = 0;
         }
 
 
+        // --- Right Hand Controls (Rotation) ---
+        if (isRightHandPresent && rightHandLandmarks) {
+             // Calculate rotation angle using Wrist(0) and Middle Finger MCP(9)
+            if (rightHandLandmarks[0] && rightHandLandmarks[9]) {
+                const wrist = rightHandLandmarks[0];
+                const middleMcp = rightHandLandmarks[9];
+
+                // Calculate vector from wrist to middle MCP
+                // Mirrored view means X is flipped relative to actual hand movement.
+                // Correct dx for the mirrored view before calculating angle.
+                const dx = -(middleMcp.x - wrist.x); // Negate dx due to mirror
+                const dy = middleMcp.y - wrist.y;
+
+                // Calculate angle using atan2.
+                let handAngle = Math.atan2(dy, dx);
+
+                // Map this angle to the target camera angle.
+                // Absolute control: set target angle based on hand orientation.
+                // Offset might be needed depending on desired 'zero' rotation point.
+                // E.g., add Math.PI / 2 if vertical hand should be zero rotation.
+                targetCameraAngleX = handAngle * rotationSensitivity; // Adjust sensitivity/direction if needed
+
+            }
+        }
+        // Note: If right hand disappears, isRightHandPresent becomes false,
+        // and animate() loop will revert to time-based rotation.
+
     } else {
-        // No hand detected
-        lastHandX = null;
+        // --- No hands detected ---
+        isLeftHandPresent = false;
+        isRightHandPresent = false;
+        lastLeftHandX = null;
         swipeAccumulatedDistance = 0;
-        // Optional: Smoothly return to a default zoom?
-        // targetCameraZ = mapRange(MAX_PINCH_DIST * 0.8, MIN_PINCH_DIST, MAX_PINCH_DIST, MIN_CAMERA_Z, MAX_CAMERA_Z); // Drift towards zoomed-out view
+        // Keep targetCameraAngleX as is, animate loop handles the fallback
     }
 
     canvasCtx.restore(); // Restore canvas context
 }
 
-function setupHandTracking() {
-    // Video and canvas elements are assigned in init()
 
+function setupHandTracking() {
     if (!videoElement || !canvasElement || !canvasCtx) {
         console.error("Video or Canvas element not ready for Hand Tracking setup.");
         return;
     }
 
+    // Check if MediaPipe components are loaded
     if (typeof Hands === 'undefined' || typeof Camera === 'undefined' || typeof drawConnectors === 'undefined' || typeof drawLandmarks === 'undefined') {
-        console.error("MediaPipe Hands/Camera/Drawing library not found. Skipping hand tracking setup.");
+        console.error("MediaPipe Hands/Camera/Drawing library not found.");
         const instructions = document.getElementById('instructions');
         if(instructions) instructions.textContent = "Hand tracking library failed to load.";
         return;
@@ -751,7 +821,9 @@ function setupHandTracking() {
         }});
 
         hands.setOptions({
-          maxNumHands: 1,
+          // --- Track up to two hands ---
+          maxNumHands: 2,
+          // ---
           modelComplexity: 1,
           minDetectionConfidence: 0.6, // Adjusted confidence
           minTrackingConfidence: 0.6
