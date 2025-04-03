@@ -37,13 +37,13 @@
 #patternName {
     position: fixed;
     top: 25px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 25px;
+    /* transform: translateX(-50%); */
     color: white;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 32px;
+    font-size: 30px;
     pointer-events: none;
-    z-index: 100;
+    z-index: 103;
     opacity: 0;
     transition: opacity 0.5s ease;
     text-align: center;
@@ -75,8 +75,8 @@
   position: fixed;
   top: 10px;
   left: 32%;
-  width: 240px; /* Smaller size */
-  height: 135px; /* Maintain 16:9 ratio */
+  width: 256px; /* Smaller size */
+  height: 144px; /* Maintain 16:9 ratio */
   border: 1px solid white;
   z-index: 101; /* Ensure it's above the main canvas slightly */
    transform: scaleX(-1); /* Mirror flip */
@@ -87,8 +87,8 @@
   position: fixed;
   top: 10px;
   left: 32%;
-  width: 240px;
-  height: 135px;
+  width: 256px; /* Smaller size */
+  height: 144px; /* Maintain 16:9 ratio */
   z-index: 102; /* Above video */
   pointer-events: none; /* Allow clicks to go through */
    transform: scaleX(-1); /* Mirror flip to match video */

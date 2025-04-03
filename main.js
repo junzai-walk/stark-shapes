@@ -638,6 +638,29 @@ function onResults(results) {
             if (landmarks) {
                 drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: color, lineWidth: 2 });
                 drawLandmarks(canvasCtx, landmarks, { color: dotColor, lineWidth: 1, radius: 3 });
+                
+                // --- Draw hand function label ---
+                const wrist = landmarks[0]; // Use wrist as reference point
+                const labelText = isLeft ? "Zoom" : "Rotate";
+                
+                // Position label near but slightly offset from the wrist
+                const labelX = wrist.x * canvasElement.width - (isLeft ? -30 : 30);
+                const labelY = wrist.y * canvasElement.height - 25;
+                
+                // Draw text with shadow for better visibility
+                canvasCtx.save(); // Save the current state
+                
+                // Apply counter-transformation to make text readable (flip horizontally)
+                canvasCtx.scale(-1, 1);
+                const flippedX = -labelX; // Negate x position for proper placement after flip
+                
+                canvasCtx.font = "32px 'Courier New', monospace";
+                canvasCtx.fillStyle = "rgba(0, 0, 0, 1.0)"; // Shadow
+                canvasCtx.fillText(labelText, flippedX + 2, labelY + 2);
+                canvasCtx.fillStyle = "white"; // White text
+                canvasCtx.fillText(labelText, flippedX, labelY);
+                
+                canvasCtx.restore(); // Restore the previous state
             }
         }
 
@@ -797,7 +820,7 @@ function setupBloom() {
     // Add the UnrealBloomPass with nice default values for particles
     const bloomPass = new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight), // resolution
-      1.5,    // strength (intensity of the bloom)
+      1.3,    // strength (intensity of the bloom)
       0.1,    // radius (how far the bloom extends)
       0.1,    // threshold (minimum brightness to apply bloom)
     );
