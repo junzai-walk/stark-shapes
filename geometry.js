@@ -105,4 +105,158 @@ function createTorus(i, count) {
     );
 }
 
-const patterns = [createGrid, createSphere, createSpiral, createHelix, createTorus];
+function createVortex(i, count) {
+    // Vortex parameters
+    const height = 60;        // Total height of the vortex
+    const maxRadius = 35;     // Maximum radius at the top
+    const minRadius = 5;      // Minimum radius at the bottom
+    const numRotations = 3;   // Number of full rotations from top to bottom
+    
+    // Calculate normalized height position (0 = bottom, 1 = top)
+    const t = i / count;
+    
+    // Add some randomness to distribute particles more naturally
+    const randomOffset = 0.05 * Math.random();
+    const heightPosition = t + randomOffset;
+    
+    // Calculate radius that decreases from top to bottom
+    const radius = minRadius + (maxRadius - minRadius) * heightPosition;
+    
+    // Calculate angle with more rotations at the bottom
+    const angle = numRotations * Math.PI * 2 * (1 - heightPosition) + (i * 0.1);
+    
+    // Calculate the vertical position (from bottom to top)
+    const y = (heightPosition - 0.5) * height;
+    
+    return new THREE.Vector3(
+        Math.cos(angle) * radius,
+        y,
+        Math.sin(angle) * radius
+    );
+}
+
+function createGalaxy(i, count) {
+    // Galaxy parameters
+    const numArms = 4;            // Number of spiral arms
+    const armWidth = 0.15;        // Width of each arm (0-1)
+    const maxRadius = 40;         // Maximum radius of the galaxy
+    const thickness = 5;          // Vertical thickness
+    const twistFactor = 2.5;      // How much the arms twist
+    
+    // Determine which arm this particle belongs to
+    const armIndex = i % numArms;
+    const indexInArm = Math.floor(i / numArms) / Math.floor(count / numArms);
+    
+    // Calculate radial distance from center
+    const radialDistance = indexInArm * maxRadius;
+    
+    // Add some randomness for arm width
+    const randomOffset = (Math.random() * 2 - 1) * armWidth;
+    
+    // Calculate angle with twist that increases with distance
+    const armOffset = (2 * Math.PI / numArms) * armIndex;
+    const twistAmount = twistFactor * indexInArm;
+    const angle = armOffset + twistAmount + randomOffset;
+    
+    // Add height variation that decreases with distance from center
+    const verticalPosition = (Math.random() * 2 - 1) * thickness * (1 - indexInArm * 0.8);
+    
+    return new THREE.Vector3(
+        Math.cos(angle) * radialDistance,
+        verticalPosition,
+        Math.sin(angle) * radialDistance
+    );
+}
+
+function createWave(i, count) {
+    // Wave/ocean parameters
+    const width = 60;       // Total width of the wave field
+    const depth = 60;       // Total depth of the wave field
+    const waveHeight = 10;  // Maximum height of waves
+    const waveDensity = 0.1; // Controls wave frequency
+    
+    // Create a grid of points (similar to your grid function but for a 2D plane)
+    const gridSize = Math.ceil(Math.sqrt(count));
+    const spacingX = width / gridSize;
+    const spacingZ = depth / gridSize;
+    
+    // Calculate 2D grid position
+    const ix = i % gridSize;
+    const iz = Math.floor(i / gridSize);
+    
+    // Convert to actual coordinates with proper spacing
+    const halfWidth = width / 2;
+    const halfDepth = depth / 2;
+    const x = ix * spacingX - halfWidth;
+    const z = iz * spacingZ - halfDepth;
+    
+    // Create wave pattern using multiple sine waves for a more natural look
+    // We use the x and z coordinates to create a position-based wave pattern
+    const y = Math.sin(x * waveDensity) * Math.cos(z * waveDensity) * waveHeight +
+              Math.sin(x * waveDensity * 2.5) * Math.cos(z * waveDensity * 2.1) * (waveHeight * 0.3);
+    
+    return new THREE.Vector3(x, y, z);
+}
+
+function createMobius(i, count) {
+    // Möbius strip parameters
+    const radius = 25;       // Major radius of the strip
+    const width = 10;        // Width of the strip
+    
+    // Distribute points evenly along the length of the Möbius strip
+    // and across its width
+    const lengthSteps = Math.sqrt(count);
+    const widthSteps = count / lengthSteps;
+    
+    // Calculate position along length and width of strip
+    const lengthIndex = i % lengthSteps;
+    const widthIndex = Math.floor(i / lengthSteps) % widthSteps;
+    
+    // Normalize to 0-1 range
+    const u = lengthIndex / lengthSteps;        // Position around the strip (0 to 1)
+    const v = (widthIndex / widthSteps) - 0.5;  // Position across width (-0.5 to 0.5)
+    
+    // Parametric equations for Möbius strip
+    const theta = u * Math.PI * 2;  // Full loop around
+    
+    // Calculate the Möbius strip coordinates
+    // This creates a half-twist in the strip
+    const x = (radius + width * v * Math.cos(theta / 2)) * Math.cos(theta);
+    const y = (radius + width * v * Math.cos(theta / 2)) * Math.sin(theta);
+    const z = width * v * Math.sin(theta / 2);
+    
+    return new THREE.Vector3(x, y, z);
+}
+
+function createSupernova(i, count) {
+    // Supernova parameters
+    const maxRadius = 40;        // Maximum explosion radius
+    const coreSize = 0.2;        // Size of the dense core (0-1)
+    const outerDensity = 0.7;    // Density of particles in outer shell
+    
+    // Use golden ratio distribution for even spherical coverage
+    const phi = Math.acos(1 - 2 * (i / count));
+    const theta = Math.PI * 2 * i * (1 + Math.sqrt(5));
+    
+    // Calculate radial distance with more particles near center and at outer shell
+    let normalizedRadius;
+    const random = Math.random();
+    
+    if (i < count * coreSize) {
+        // Dense core - distribute within inner radius
+        normalizedRadius = Math.pow(random, 0.5) * 0.3;
+    } else {
+        // Explosion wave - distribute with more particles at the outer shell
+        normalizedRadius = 0.3 + Math.pow(random, outerDensity) * 0.7;
+    }
+    
+    // Scale to max radius
+    const radius = normalizedRadius * maxRadius;
+    
+    // Convert spherical to Cartesian coordinates
+    return new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta) * radius,
+        Math.sin(phi) * Math.sin(theta) * radius,
+        Math.cos(phi) * radius
+    );
+}

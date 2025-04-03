@@ -5,16 +5,10 @@ Blur shader?
 */
 
 // main.js
-// Add this helper function somewhere accessible, e.g., near the top or before onResults
-function calculateDistance(landmark1, landmark2) {
-    if (!landmark1 || !landmark2) return Infinity;
-    const dx = landmark1.x - landmark2.x;
-    const dy = landmark1.y - landmark2.y;
-    // Optional: include z distance if needed, but for screen-space pinch, x/y is often enough
-    // const dz = landmark1.z - landmark2.z;
-    // return Math.sqrt(dx * dx + dy * dy + dz * dz);
-    return Math.sqrt(dx * dx + dy * dy);
-}
+const patterns = [createGrid, createSphere, createSpiral,
+createHelix, createTorus, createVortex, createGalaxy,
+createWave, createMobius, createSupernova];
+const patternNames = ["Cube", "Sphere", "Spiral", "Helix", "Torus", "Vortex", "Galaxy", "Wave", "Möbius", "Supernova"];
 
 let hands;
 let handDetected = false; // Flag if *any* hand is detected
@@ -100,8 +94,6 @@ function startExperience() {
 window.onload = startExperience;
 // --- End of Execution Start block ---
 
-const patternNames = ["Cube", "Sphere", "Spiral", "Helix", "Torus"];
-
 // --- PARTICLE TEXTURE ---
 function createParticleTexture() {
     const canvas = document.createElement('canvas');
@@ -157,9 +149,7 @@ function createParticleSystem() {
     positions[i * 3 + 1] = pos.y;
     positions[i * 3 + 2] = pos.z;
 
-    //const colorIndex = Math.floor(Math.random() * initialPalette.length);
-    const colorIndex = 0;
-    const baseColor = initialPalette[colorIndex];
+    const baseColor = initialPalette[0];
     const variation = 1.0; // Add variation
 
     colors[i * 3] = baseColor.r * variation;
@@ -342,23 +332,21 @@ function transitionToPattern(newPattern) {
 
     // Generate new positions
     for (let i = 0; i < count; i++) {
-    const p = patternFn(i, count);
-    newPos[i * 3] = p.x;
-    newPos[i * 3 + 1] = p.y;
-    newPos[i * 3 + 2] = p.z;
+        const p = patternFn(i, count);
+        newPos[i * 3] = p.x;
+        newPos[i * 3 + 1] = p.y;
+        newPos[i * 3 + 2] = p.z;
     }
 
     // Generate new colors
     const newCol = new Float32Array(curCol.length);
-    const palette = colorPalettes[newPattern];
+    const palette = colorPalettes[newPattern%colorPalettes.length];
     for (let i = 0; i < count; i++) {
-    //const idx = Math.floor(Math.random() * palette.length);
-    const idx = 0;
-    const base = palette[idx];
-    const variation = 1.0; // Keep color variation consistent
-    newCol[i * 3] = base.r * variation;
-    newCol[i * 3 + 1] = base.g * variation;
-    newCol[i * 3 + 2] = base.b * variation;
+        const base = palette[0];
+        const variation = 1.0; // Keep color variation consistent
+        newCol[i * 3] = base.r * variation;
+        newCol[i * 3 + 1] = base.g * variation;
+        newCol[i * 3 + 2] = base.b * variation;
     }
 
     // Store transition data
@@ -858,4 +846,14 @@ function setupBloom() {
         }
       }
     };
+}
+
+function calculateDistance(landmark1, landmark2) {
+    if (!landmark1 || !landmark2) return Infinity;
+    const dx = landmark1.x - landmark2.x;
+    const dy = landmark1.y - landmark2.y;
+    // Optional: include z distance if needed, but for screen-space pinch, x/y is often enough
+    // const dz = landmark1.z - landmark2.z;
+    // return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return Math.sqrt(dx * dx + dy * dy);
 }
