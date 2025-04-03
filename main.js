@@ -681,12 +681,27 @@ function onResults(results) {
                 canvasCtx.scale(-1, 1);
                 const flippedX = -labelX; // Negate x position for proper placement after flip
                 
+                // Add semi-transparent black rectangle background
+                canvasCtx.font = "32px 'Courier New', monospace"; // Set font first to measure text
+                const textMetrics = canvasCtx.measureText(labelText);
+                const textWidth = textMetrics.width;
+                const textHeight = 32; // Approximate height based on font size
+                const padding = 8; // Padding around text
+
+                // Draw the background rectangle
+                canvasCtx.fillStyle = "rgba(0, 8, 255, 0.6)"; // Semi-transparent black
+                canvasCtx.fillRect(
+                    flippedX - padding, 
+                    labelY - textHeight + padding/2, 
+                    textWidth + padding*2, 
+                    textHeight + padding
+                );
+
+                // Now draw the text on top of the rectangle
                 canvasCtx.font = "32px 'Courier New', monospace";
-                canvasCtx.fillStyle = "rgba(0, 0, 0, 1.0)"; // Shadow
-                canvasCtx.fillText(labelText, flippedX + 2, labelY + 2);
                 canvasCtx.fillStyle = "white"; // White text
                 canvasCtx.fillText(labelText, flippedX, labelY);
-                
+
                 canvasCtx.restore(); // Restore the previous state
             }
         }
