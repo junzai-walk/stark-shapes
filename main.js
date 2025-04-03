@@ -1,3 +1,11 @@
+/*
+Different color at edges of shape to give more structured look
+Different hand motion to control wave intensity
+Hand motion to switch colors
+Chromatic abberation shader?
+Blur shader?
+*/
+
 // main.js
 // Add this helper function somewhere accessible, e.g., near the top or before onResults
 function calculateDistance(landmark1, landmark2) {
@@ -20,11 +28,13 @@ let rightHandLandmarks = null;
 let targetCameraZ = 100; // Target Z position for smooth zoom - increased for wider view
 const MIN_CAMERA_Z = 20;
 const MAX_CAMERA_Z = 200;
-const MIN_PINCH_DIST = 0.03; // Minimum distance between thumb and index for max zoom-in
-const MAX_PINCH_DIST = 0.18; // Maximum distance for max zoom-out (adjust based on testing)
+const MIN_PINCH_DIST = 0.04; // Minimum distance between thumb and index for max zoom-in
+const MAX_PINCH_DIST = 0.16; // Maximum distance for max zoom-out (adjust based on testing)
 
 let lastPatternChangeTime = 0;
 const patternChangeCooldown = 1500;
+
+const clock = new THREE.Clock();
 
 // Clap detection variables
 let lastHandDistance = Infinity;
@@ -59,11 +69,11 @@ let gui;
 
 // Animation parameters (configurable via dat.gui)
 const params = {
-    particleCount: 100000,
-    transitionSpeed: 0.015,
+    particleCount: 50000,
+    transitionSpeed: 0.005,
     cameraSpeed: 0.0, // Set to 0 to disable default camera movement
     waveIntensity: 0.1,
-    particleSize: 0.4,
+    particleSize: 0.2,
     changePattern: function() {
         forcePatternChange();
     }
@@ -96,94 +106,94 @@ const patternNames = ["Cube", "Sphere", "Spiral", "Helix", "Torus"];
 
 // --- PATTERN FUNCTIONS ---
 function createSphere(i, count) {
-const t = i / count;
-const phi = Math.acos(2 * t - 1);
-const theta = 2 * Math.PI * (i / count) * Math.sqrt(count);
-return new THREE.Vector3(
-Math.sin(phi) * Math.cos(theta) * 30,
-Math.sin(phi) * Math.sin(theta) * 30,
-Math.cos(phi) * 30
-);
+    const t = i / count;
+    const phi = Math.acos(2 * t - 1);
+    const theta = 2 * Math.PI * (i / count) * Math.sqrt(count);
+    return new THREE.Vector3(
+    Math.sin(phi) * Math.cos(theta) * 30,
+    Math.sin(phi) * Math.sin(theta) * 30,
+    Math.cos(phi) * 30
+    );
 }
 
 function createSpiral(i, count) {
-const t = i / count;
-const numArms = 3;
-const armIndex = i % numArms;
-const angleOffset = (2 * Math.PI / numArms) * armIndex;
-const angle = Math.pow(t, 0.7) * 15 + angleOffset;
-const radius = t * 40;
-const height = Math.sin(t * Math.PI * 2) * 5;
-return new THREE.Vector3(
-Math.cos(angle) * radius,
-Math.sin(angle) * radius,
-height
-);
+    const t = i / count;
+    const numArms = 3;
+    const armIndex = i % numArms;
+    const angleOffset = (2 * Math.PI / numArms) * armIndex;
+    const angle = Math.pow(t, 0.7) * 15 + angleOffset;
+    const radius = t * 40;
+    const height = Math.sin(t * Math.PI * 2) * 5;
+    return new THREE.Vector3(
+    Math.cos(angle) * radius,
+    Math.sin(angle) * radius,
+    height
+    );
 }
 
 function createGrid(i, count) {
-const sideLength = Math.ceil(Math.cbrt(count));
-const spacing = 60 / sideLength;
-const halfGrid = (sideLength - 1) * spacing / 2;
-const iz = Math.floor(i / (sideLength * sideLength));
-const iy = Math.floor((i % (sideLength * sideLength)) / sideLength);
-const ix = i % sideLength;
-// Avoid placing a particle exactly at the center if grid size is odd
-if (ix === Math.floor(sideLength/2) && iy === Math.floor(sideLength/2) && iz === Math.floor(sideLength/2) && sideLength % 2 !== 0) {
-return new THREE.Vector3(spacing * 0.1, spacing * 0.1, spacing * 0.1); // Slightly offset
-}
-return new THREE.Vector3(
-ix * spacing - halfGrid,
-iy * spacing - halfGrid,
-iz * spacing - halfGrid
-);
+    const sideLength = Math.ceil(Math.cbrt(count));
+    const spacing = 60 / sideLength;
+    const halfGrid = (sideLength - 1) * spacing / 2;
+    const iz = Math.floor(i / (sideLength * sideLength));
+    const iy = Math.floor((i % (sideLength * sideLength)) / sideLength);
+    const ix = i % sideLength;
+    // Avoid placing a particle exactly at the center if grid size is odd
+    if (ix === Math.floor(sideLength/2) && iy === Math.floor(sideLength/2) && iz === Math.floor(sideLength/2) && sideLength % 2 !== 0) {
+    return new THREE.Vector3(spacing * 0.1, spacing * 0.1, spacing * 0.1); // Slightly offset
+    }
+    return new THREE.Vector3(
+    ix * spacing - halfGrid,
+    iy * spacing - halfGrid,
+    iz * spacing - halfGrid
+    );
 }
 
 function createHelix(i, count) {
-const numHelices = 2;
-const helixIndex = i % numHelices;
-const t = Math.floor(i / numHelices) / Math.floor(count / numHelices);
-const angle = t * Math.PI * 10;
-const radius = 15;
-const height = (t - 0.5) * 60;
-const angleOffset = helixIndex * Math.PI;
-return new THREE.Vector3(
-Math.cos(angle + angleOffset) * radius,
-Math.sin(angle + angleOffset) * radius,
-height
-);
+    const numHelices = 2;
+    const helixIndex = i % numHelices;
+    const t = Math.floor(i / numHelices) / Math.floor(count / numHelices);
+    const angle = t * Math.PI * 10;
+    const radius = 15;
+    const height = (t - 0.5) * 60;
+    const angleOffset = helixIndex * Math.PI;
+    return new THREE.Vector3(
+    Math.cos(angle + angleOffset) * radius,
+    Math.sin(angle + angleOffset) * radius,
+    height
+    );
 }
 
 function createTorus(i, count) {
-const R = 30;
-const r = 10;
-// Use a deterministic approach based on 'i' for better distribution
-const u = (i / count) * 2 * Math.PI;
-const v = (i * Math.sqrt(5)) * 2 * Math.PI; // Use golden angle approximation for second angle
+    const R = 30;
+    const r = 10;
+    // Use a deterministic approach based on 'i' for better distribution
+    const u = (i / count) * 2 * Math.PI;
+    const v = (i * Math.sqrt(5)) * 2 * Math.PI; // Use golden angle approximation for second angle
 
-return new THREE.Vector3(
-(R + r * Math.cos(v)) * Math.cos(u),
-(R + r * Math.cos(v)) * Math.sin(u),
-r * Math.sin(v)
-);
+    return new THREE.Vector3(
+    (R + r * Math.cos(v)) * Math.cos(u),
+    (R + r * Math.cos(v)) * Math.sin(u),
+    r * Math.sin(v)
+    );
 }
 
 const patterns = [createGrid, createSphere, createSpiral, createHelix, createTorus];
 
 // --- PARTICLE TEXTURE ---
 function createParticleTexture() {
-const canvas = document.createElement('canvas');
-canvas.width = 64;
-canvas.height = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
 
-const context = canvas.getContext('2d');
-const gradient = context.createRadialGradient(
-canvas.width / 2,
-canvas.height / 2,
-0,
-canvas.width / 2,
-canvas.height / 2,
-canvas.width / 2
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(
+    canvas.width / 2,
+    canvas.height / 2,
+    0,
+    canvas.width / 2,
+    canvas.height / 2,
+    canvas.width / 2
 );
 
 gradient.addColorStop(0, 'rgba(255,255,255,1)');
@@ -201,11 +211,11 @@ return texture;
 
 // --- COLOR PALETTES ---
 const colorPalettes = [
-[ new THREE.Color(0x3399ff), new THREE.Color(0x44ccff), new THREE.Color(0x0055cc) ],
-[ new THREE.Color(0xff3399), new THREE.Color(0xcc00ff), new THREE.Color(0x660099), new THREE.Color(0xaa33ff) ],
-[ new THREE.Color(0x33ff99), new THREE.Color(0x33ff99), new THREE.Color(0x99ff66), new THREE.Color(0x008844) ],
-[ new THREE.Color(0xff9933), new THREE.Color(0xffcc33), new THREE.Color(0xff6600), new THREE.Color(0xffaa55) ],
-[ new THREE.Color(0x9933ff), new THREE.Color(0xff66aa), new THREE.Color(0xff0066), new THREE.Color(0xcc0055) ]
+    [ new THREE.Color(0x3399ff), new THREE.Color(0x44ccff), new THREE.Color(0x0055cc) ],
+    [ new THREE.Color(0xff3399), new THREE.Color(0xcc00ff), new THREE.Color(0x660099), new THREE.Color(0xaa33ff) ],
+    [ new THREE.Color(0x33ff99), new THREE.Color(0x33ff99), new THREE.Color(0x99ff66), new THREE.Color(0x008844) ],
+    [ new THREE.Color(0xff9933), new THREE.Color(0xffcc33), new THREE.Color(0xff6600), new THREE.Color(0xffaa55) ],
+    [ new THREE.Color(0x9933ff), new THREE.Color(0xff66aa), new THREE.Color(0xff0066), new THREE.Color(0xcc0055) ]
 ];
 
 // --- PARTICLE SYSTEM ---
@@ -246,7 +256,7 @@ function createParticleSystem() {
     size: params.particleSize,
     vertexColors: true,
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.5,
     blending: THREE.AdditiveBlending,
     sizeAttenuation: true, // Make distant particles smaller
 
@@ -259,39 +269,40 @@ function createParticleSystem() {
 
 // --- INIT THREE.JS ---
 function init() {
-scene = new THREE.Scene();
-camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1500);
-camera.position.z = targetCameraZ; // Starting with a wider default view
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1500);
+    camera.position.z = targetCameraZ; // Starting with a wider default view
 
-renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
 
-const container = document.getElementById('container');
-if (container) {
-container.appendChild(renderer.domElement);
-} else {
-console.error("HTML element with id 'container' not found!");
-return;
-}
+    const container = document.getElementById('container');
+    if (container) {
+    container.appendChild(renderer.domElement);
+    } else {
+    console.error("HTML element with id 'container' not found!");
+    return;
+    }
 
-particles = createParticleSystem();
-scene.add(particles);
-window.addEventListener('resize', onWindowResize);
-initGUI();
-updatePatternName(patternNames[currentPattern], true);
+    particles = createParticleSystem();
+    scene.add(particles);
+    window.addEventListener('resize', onWindowResize);
+    initGUI();
+    updatePatternName(patternNames[currentPattern], true);
 
-// --- Get references for drawing ---
-videoElement = document.querySelector('.input_video');
-canvasElement = document.querySelector('.output_canvas');
-if (canvasElement) {
-canvasCtx = canvasElement.getContext('2d');
-} else {
-console.error("Output canvas element not found!");
-}
-// ---
+    // --- Get references for drawing ---
+    videoElement = document.querySelector('.input_video');
+    canvasElement = document.querySelector('.output_canvas');
+    if (canvasElement) {
+        canvasCtx = canvasElement.getContext('2d');
+    } else {
+        console.error("Output canvas element not found!");
+    }
+    // ---
 
-setupHandTracking(); // Setup hand tracking last
+    setupBloom();
+    setupHandTracking(); // Setup hand tracking last
 }
 
 // --- WINDOW RESIZE ---
@@ -363,200 +374,198 @@ function completeCurrentTransition() {
 }
 
 function updatePatternName(name, instant = false) {
-const el = document.getElementById('patternName');
-if (!el) return;
-el.textContent = name;
-if (instant) {
-el.style.transition = 'none'; // Disable transition for instant display
-el.style.opacity = '1';
- // Set a timeout to fade out after a delay, even for instant
- setTimeout(() => {
-    if(el) {
-        el.style.transition = 'opacity 0.5s ease'; // Re-enable transition for fade-out
-        el.style.opacity = '0';
+    const el = document.getElementById('patternName');
+    
+    if (!el) return;
+    el.textContent = name;
+
+    if (instant) {
+        el.style.transition = 'none'; // Disable transition for instant display
+        el.style.opacity = '1';
+        // Set a timeout to fade out after a delay, even for instant
+        setTimeout(() => {
+            if(el) {
+                el.style.transition = 'opacity 0.5s ease'; // Re-enable transition for fade-out
+                el.style.opacity = '0';
+            }
+        }, 3500); // Keep visible slightly longer
+    } else {
+        el.style.transition = 'opacity 0.5s ease';
+        el.style.opacity = '1'; // Fade in
+        // Set timeout to fade out
+        setTimeout(() => {
+            if(el) el.style.opacity = '0';
+        }, 3500); // Fade out after 2.5 seconds
     }
-}, 3500); // Keep visible slightly longer
-} else {
-el.style.transition = 'opacity 0.5s ease';
-el.style.opacity = '1'; // Fade in
-// Set timeout to fade out
-setTimeout(() => {
-    if(el) el.style.opacity = '0';
-}, 3500); // Fade out after 2.5 seconds
-}
 }
 
 function transitionToPattern(newPattern) {
-if (!particles || !particles.geometry || !particles.geometry.attributes.position) return;
+    if (!particles || !particles.geometry || !particles.geometry.attributes.position) return;
 
-isTransitioning = true;
-const posAttr = particles.geometry.attributes.position;
-const colAttr = particles.geometry.attributes.color;
+    isTransitioning = true;
+    const posAttr = particles.geometry.attributes.position;
+    const colAttr = particles.geometry.attributes.color;
 
-// Ensure current colors are stored correctly before starting
-if (!particles.geometry.userData.currentColors || particles.geometry.userData.currentColors.length !== colAttr.array.length) {
- particles.geometry.userData.currentColors = new Float32Array(colAttr.array);
-}
+    // Ensure current colors are stored correctly before starting
+    if (!particles.geometry.userData.currentColors || particles.geometry.userData.currentColors.length !== colAttr.array.length) {
+    particles.geometry.userData.currentColors = new Float32Array(colAttr.array);
+    }
 
-const curPos = new Float32Array(posAttr.array);
-const curCol = new Float32Array(particles.geometry.userData.currentColors); // Use stored colors as 'from'
+    const curPos = new Float32Array(posAttr.array);
+    const curCol = new Float32Array(particles.geometry.userData.currentColors); // Use stored colors as 'from'
 
-const newPos = new Float32Array(curPos.length);
-const patternFn = patterns[newPattern];
-const count = params.particleCount;
+    const newPos = new Float32Array(curPos.length);
+    const patternFn = patterns[newPattern];
+    const count = params.particleCount;
 
-// Generate new positions
-for (let i = 0; i < count; i++) {
-const p = patternFn(i, count);
-newPos[i * 3] = p.x;
-newPos[i * 3 + 1] = p.y;
-newPos[i * 3 + 2] = p.z;
-}
+    // Generate new positions
+    for (let i = 0; i < count; i++) {
+    const p = patternFn(i, count);
+    newPos[i * 3] = p.x;
+    newPos[i * 3 + 1] = p.y;
+    newPos[i * 3 + 2] = p.z;
+    }
 
-// Generate new colors
-const newCol = new Float32Array(curCol.length);
-const palette = colorPalettes[newPattern];
-for (let i = 0; i < count; i++) {
-//const idx = Math.floor(Math.random() * palette.length);
-const idx = 0;
-const base = palette[idx];
-const variation = 1.0; // Keep color variation consistent
-newCol[i * 3] = base.r * variation;
-newCol[i * 3 + 1] = base.g * variation;
-newCol[i * 3 + 2] = base.b * variation;
-}
+    // Generate new colors
+    const newCol = new Float32Array(curCol.length);
+    const palette = colorPalettes[newPattern];
+    for (let i = 0; i < count; i++) {
+    //const idx = Math.floor(Math.random() * palette.length);
+    const idx = 0;
+    const base = palette[idx];
+    const variation = 1.0; // Keep color variation consistent
+    newCol[i * 3] = base.r * variation;
+    newCol[i * 3 + 1] = base.g * variation;
+    newCol[i * 3 + 2] = base.b * variation;
+    }
 
-// Store transition data
-particles.userData.fromPositions = curPos;
-particles.userData.toPositions = newPos;
-particles.userData.fromColors = curCol;
-particles.userData.toColors = newCol;
-particles.userData.targetPattern = newPattern; // Store the target pattern index
-transitionProgress = 0; // Reset progress
+    // Store transition data
+    particles.userData.fromPositions = curPos;
+    particles.userData.toPositions = newPos;
+    particles.userData.fromColors = curCol;
+    particles.userData.toColors = newCol;
+    particles.userData.targetPattern = newPattern; // Store the target pattern index
+    transitionProgress = 0; // Reset progress
 }
 
 
 // --- Helper function to map a value from one range to another ---
 function mapRange(value, inMin, inMax, outMin, outMax) {
-// Clamp value to input range
-value = Math.max(inMin, Math.min(inMax, value));
-return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+    // Clamp value to input range
+    value = Math.max(inMin, Math.min(inMax, value));
+    return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
 }
-
-const clock = new THREE.Clock();
 
 // --- ANIMATION LOOP ---
 function animate() {
-requestAnimationFrame(animate);
-if (!renderer || !camera || !scene) return;
+    requestAnimationFrame(animate);
+    if (!renderer || !camera || !scene) return;
 
-const deltaTime = clock.getDelta();
-time += deltaTime; // Keep time updating for other potential uses
+    const deltaTime = clock.getDelta();
+    time += deltaTime; // Keep time updating for other potential uses
 
-// --- Particle Update ---
-if (particles && particles.geometry && particles.geometry.attributes.position) {
-const positions = particles.geometry.attributes.position.array;
-const count = params.particleCount;
+    // --- Particle Update ---
+    if (particles && particles.geometry && particles.geometry.attributes.position) {
+        const positions = particles.geometry.attributes.position.array;
+        const count = params.particleCount;
 
-// Apply wave motion (if not transitioning)
-if (!isTransitioning) {
-    for (let i = 0; i < count; i++) {
-        const idx = i * 3;
-        const noise1 = Math.sin(time * 0.5 + i * 0.02) * params.waveIntensity;
-        const noise2 = Math.cos(time * 0.5 + i * 0.02) * params.waveIntensity;
-        positions[idx] += noise1 * deltaTime * 10;
-        positions[idx + 1] += noise2 * deltaTime * 10;
-    }
-    particles.geometry.attributes.position.needsUpdate = true;
-}
-
- // --- Transition Logic ---
- if (isTransitioning && particles.userData.fromPositions && particles.userData.toPositions && particles.userData.fromColors && particles.userData.toColors) {
-    transitionProgress += params.transitionSpeed * deltaTime * 60; // Scale speed by frame time (approx)
-
-    if (transitionProgress >= 1.0) {
-        transitionProgress = 1.0;
-        completeCurrentTransition(); // Finalize positions and clean up
-    } else {
-        const colors = particles.geometry.attributes.color.array; // Get color buffer
-        const fromPos = particles.userData.fromPositions;
-        const toPos = particles.userData.toPositions;
-        const fromCol = particles.userData.fromColors;
-        const toCol = particles.userData.toColors;
-        const t = transitionProgress;
-        const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-
-        // Check array lengths before interpolation
-        if (positions && colors && fromPos && toPos && fromCol && toCol &&
-            fromPos.length === positions.length && toPos.length === positions.length &&
-            fromCol.length === colors.length && toCol.length === colors.length) {
-
+        // Apply wave motion (if not transitioning)
+        if (!isTransitioning) {
             for (let i = 0; i < count; i++) {
-                const index = i * 3;
-                // Interpolate positions
-                positions[index] = fromPos[index] * (1 - ease) + toPos[index] * ease;
-                positions[index + 1] = fromPos[index + 1] * (1 - ease) + toPos[index + 1] * ease;
-                positions[index + 2] = fromPos[index + 2] * (1 - ease) + toPos[index + 2] * ease;
-                // Interpolate colors
-                colors[index] = fromCol[index] * (1 - ease) + toCol[index] * ease;
-                colors[index + 1] = fromCol[index + 1] * (1 - ease) + toCol[index + 1] * ease;
-                colors[index + 2] = fromCol[index + 2] * (1 - ease) + toCol[index + 2] * ease;
+                const idx = i * 3;
+                const noise1 = Math.cos(time * 0.5 + i * 0.05) * params.waveIntensity;
+                const noise2 = Math.sin(time * 0.5 + i * 0.05) * params.waveIntensity;
+                positions[idx] += noise1 * deltaTime * 20;
+                positions[idx + 1] += noise2 * deltaTime * 20;
             }
-
             particles.geometry.attributes.position.needsUpdate = true;
-            particles.geometry.attributes.color.needsUpdate = true;
-            particles.geometry.userData.currentColors = new Float32Array(colors); // Update during transition
-
-        } else {
-            console.error("Transition data length mismatch or invalid data during interpolation!");
-            completeCurrentTransition(); // Attempt to recover by completing
         }
+
+        // --- Transition Logic ---
+        if (isTransitioning && particles.userData.fromPositions && particles.userData.toPositions && particles.userData.fromColors && particles.userData.toColors) {
+            transitionProgress += params.transitionSpeed * deltaTime * 60; // Scale speed by frame time (approx)
+
+            if (transitionProgress >= 1.0) {
+                transitionProgress = 1.0;
+                completeCurrentTransition(); // Finalize positions and clean up
+            } else {
+                const colors = particles.geometry.attributes.color.array; // Get color buffer
+                const fromPos = particles.userData.fromPositions;
+                const toPos = particles.userData.toPositions;
+                const fromCol = particles.userData.fromColors;
+                const toCol = particles.userData.toColors;
+                const t = transitionProgress;
+                const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+                // Check array lengths before interpolation
+                if (positions && colors && fromPos && toPos && fromCol && toCol &&
+                    fromPos.length === positions.length && toPos.length === positions.length &&
+                    fromCol.length === colors.length && toCol.length === colors.length) {
+
+                    for (let i = 0; i < count; i++) {
+                        const index = i * 3;
+                        // Interpolate positions
+                        positions[index] = fromPos[index] * (1 - ease) + toPos[index] * ease;
+                        positions[index + 1] = fromPos[index + 1] * (1 - ease) + toPos[index + 1] * ease;
+                        positions[index + 2] = fromPos[index + 2] * (1 - ease) + toPos[index + 2] * ease;
+                        // Interpolate colors
+                        colors[index] = fromCol[index] * (1 - ease) + toCol[index] * ease;
+                        colors[index + 1] = fromCol[index + 1] * (1 - ease) + toCol[index + 1] * ease;
+                        colors[index + 2] = fromCol[index + 2] * (1 - ease) + toCol[index + 2] * ease;
+                    }
+
+                    particles.geometry.attributes.position.needsUpdate = true;
+                    particles.geometry.attributes.color.needsUpdate = true;
+                    particles.geometry.userData.currentColors = new Float32Array(colors); // Update during transition
+
+                } else {
+                    console.error("Transition data length mismatch or invalid data during interpolation!");
+                    completeCurrentTransition(); // Attempt to recover by completing
+                }
+            }
+        }
+    } // End particle update check
+
+    // --- Camera Movement --- Updated Logic ---
+    if (camera) {
+        // --- Smooth Zoom Distance (Driven by Left Hand Pinch) ---
+        const zoomSpeed = 0.04;
+        // Use camera.position.length() for current distance in orbit
+        const currentDistance = camera.position.length() > 0.1 ? camera.position.length() : targetCameraZ; // Avoid 0 length initially
+        let smoothedDistance = currentDistance + (targetCameraZ - currentDistance) * zoomSpeed;
+        // Clamp the smoothed distance to the defined min/max zoom levels
+        smoothedDistance = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, smoothedDistance));
+
+        // --- Smooth Rotation Angle (Driven by Right Hand Rotation) ---
+        // Only update target angle if right hand is present (in onResults)
+        // Smoothly interpolate camera angle towards the target
+        let deltaAngle = targetCameraAngleX - currentCameraAngleX;
+        // Normalize delta angle to take the shortest path
+        while (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
+        while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
+
+        // Apply smoothing
+        currentCameraAngleX += deltaAngle * rotationSmoothing;
+        // Keep angle within -PI to PI range (optional, but good practice)
+        currentCameraAngleX = (currentCameraAngleX + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+
+        // --- Set Camera Position using Smoothed Angle and Distance ---
+        camera.position.set(
+            Math.sin(currentCameraAngleX) * smoothedDistance,
+            0, // Keep Y position fixed for horizontal orbit
+            Math.cos(currentCameraAngleX) * smoothedDistance
+        );
+
+        camera.lookAt(0, 0, 0); // Always look at the center of the scene
     }
-}
-} // End particle update check
+    // --- End Camera Movement ---
 
-
-// --- Camera Movement --- Updated Logic ---
-if (camera) {
-    // --- Smooth Zoom Distance (Driven by Left Hand Pinch) ---
-    const zoomSpeed = 0.04;
-    // Use camera.position.length() for current distance in orbit
-    const currentDistance = camera.position.length() > 0.1 ? camera.position.length() : targetCameraZ; // Avoid 0 length initially
-    let smoothedDistance = currentDistance + (targetCameraZ - currentDistance) * zoomSpeed;
-    // Clamp the smoothed distance to the defined min/max zoom levels
-    smoothedDistance = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, smoothedDistance));
-
-    // --- Smooth Rotation Angle (Driven by Right Hand Rotation) ---
-    // Only update target angle if right hand is present (in onResults)
-    // Smoothly interpolate camera angle towards the target
-    let deltaAngle = targetCameraAngleX - currentCameraAngleX;
-    // Normalize delta angle to take the shortest path
-    while (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
-    while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
-
-    // Apply smoothing
-    currentCameraAngleX += deltaAngle * rotationSmoothing;
-    // Keep angle within -PI to PI range (optional, but good practice)
-    currentCameraAngleX = (currentCameraAngleX + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
-
-    // --- Set Camera Position using Smoothed Angle and Distance ---
-    camera.position.set(
-        Math.sin(currentCameraAngleX) * smoothedDistance,
-        0, // Keep Y position fixed for horizontal orbit
-        Math.cos(currentCameraAngleX) * smoothedDistance
-    );
-
-    camera.lookAt(0, 0, 0); // Always look at the center of the scene
-}
-// --- End Camera Movement ---
-
-
-// --- Rendering ---
-if (composer) {
-composer.render(deltaTime);
-} else if (renderer && scene && camera) {
-renderer.render(scene, camera);
-}
+    // --- Rendering ---
+    if (composer) {
+        composer.render();
+    } else if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
 }
 
 // --- DAT.GUI ---
@@ -784,7 +793,6 @@ function onResults(results) {
     canvasCtx.restore();
 }
 
-
 function setupHandTracking() {
     if (!videoElement || !canvasElement || !canvasCtx) {
       console.error("Video or Canvas element not ready for Hand Tracking setup.");
@@ -853,4 +861,40 @@ function setupHandTracking() {
       const instructions = document.getElementById('instructions');
       if(instructions) instructions.textContent = "Error initializing hand tracking.";
     }
+}
+
+function setupBloom() {
+    // Create a new EffectComposer
+    composer = new THREE.EffectComposer(renderer);
+    
+    // Add the base render pass (required)
+    const renderPass = new THREE.RenderPass(scene, camera);
+    composer.addPass(renderPass);
+    
+    // Add the UnrealBloomPass with nice default values for particles
+    const bloomPass = new THREE.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight), // resolution
+      1.5,    // strength (intensity of the bloom)
+      0.1,    // radius (how far the bloom extends)
+      0.1,    // threshold (minimum brightness to apply bloom)
+    );
+    composer.addPass(bloomPass);
+    
+    // Add bloom controls to the GUI if it exists
+    if (gui) {
+      const bloomFolder = gui.addFolder('Bloom Effect');
+      bloomFolder.add(bloomPass, 'strength', 0, 3, 0.05).name('Intensity');
+      bloomFolder.add(bloomPass, 'radius', 0, 1, 0.05).name('Radius');
+      bloomFolder.add(bloomPass, 'threshold', 0, 1, 0.05).name('Threshold');
+      bloomFolder.open();
+    }
+    
+    // Update the resize handler to include the composer
+    const originalResize = onWindowResize;
+    onWindowResize = function() {
+      originalResize();
+      if (composer) {
+        composer.setSize(window.innerWidth, window.innerHeight);
+      }
+    };
 }
