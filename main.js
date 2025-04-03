@@ -7,8 +7,12 @@ Blur shader?
 // main.js
 const patterns = [createGrid, createSphere, createSpiral,
 createHelix, createTorus, createVortex, createGalaxy,
-createWave, createMobius, createSupernova];
-const patternNames = ["Cube", "Sphere", "Spiral", "Helix", "Torus", "Vortex", "Galaxy", "Wave", "Möbius", "Supernova"];
+createWave, createMobius, createSupernova, createKleinBottle,
+createFlower, createVoronoi, createFractalTree,];
+const patternNames = ["Cube", "Sphere", "Spiral", "Helix",
+    "Torus", "Vortex", "Galaxy", "Wave", "Möbius", "Supernova",
+    "Klein Bottle", "Flower", "Voronoi", "Fractal Tree", 
+];
 
 let hands;
 let handDetected = false; // Flag if *any* hand is detected
@@ -43,6 +47,12 @@ let currentCameraAngleX = 0; // Current smoothed horizontal rotation angle
 let initialHandAngle = null; // Store initial angle when right hand appears
 const rotationSensitivity = 0.8; // Increased sensitivity for more noticeable rotation
 const rotationSmoothing = 0.03; // Smoothing factor for rotation (lower = smoother)
+
+let targetCameraAngleY = 0;   // Target vertical rotation angle (radians)
+let currentCameraAngleY = 0;  // Current smoothed vertical rotation angle
+const maxYAngle = Math.PI / 4; // Limit the vertical rotation to prevent flipping (45 degrees)
+let initialHandYPosition = null; // Store initial Y position when right hand appears
+const yRotationSensitivity = 0.5; // Sensitivity for Y rotation (lower than X for more control)
 // ---
 
 // References for drawing
@@ -64,7 +74,7 @@ const params = {
     particleCount: 15000,
     transitionSpeed: 0.005,
     cameraSpeed: 0.0, // Set to 0 to disable default camera movement
-    waveIntensity: 0.1,
+    waveIntensity: 0.0,
     particleSize: 0.5,
     changePattern: function() {
         forcePatternChange();
@@ -440,32 +450,33 @@ function animate() {
     if (camera) {
         // --- Smooth Zoom Distance (Driven by Left Hand Pinch) ---
         const zoomSpeed = 0.04;
-        // Use camera.position.length() for current distance in orbit
-        const currentDistance = camera.position.length() > 0.1 ? camera.position.length() : targetCameraZ; // Avoid 0 length initially
+        const currentDistance = camera.position.length() > 0.1 ? camera.position.length() : targetCameraZ;
         let smoothedDistance = currentDistance + (targetCameraZ - currentDistance) * zoomSpeed;
-        // Clamp the smoothed distance to the defined min/max zoom levels
         smoothedDistance = Math.max(MIN_CAMERA_Z, Math.min(MAX_CAMERA_Z, smoothedDistance));
-
-        // --- Smooth Rotation Angle (Driven by Right Hand Rotation) ---
-        // Only update target angle if right hand is present (in onResults)
-        // Smoothly interpolate camera angle towards the target
-        let deltaAngle = targetCameraAngleX - currentCameraAngleX;
-        // Normalize delta angle to take the shortest path
-        while (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
-        while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
-
-        // Apply smoothing
-        currentCameraAngleX += deltaAngle * rotationSmoothing;
-        // Keep angle within -PI to PI range (optional, but good practice)
+    
+        // --- Smooth Rotation Angle (X and Y axes) ---
+        // X-axis (horizontal rotation)
+        let deltaAngleX = targetCameraAngleX - currentCameraAngleX;
+        while (deltaAngleX > Math.PI) deltaAngleX -= Math.PI * 2;
+        while (deltaAngleX < -Math.PI) deltaAngleX += Math.PI * 2;
+        currentCameraAngleX += deltaAngleX * rotationSmoothing;
         currentCameraAngleX = (currentCameraAngleX + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
-
-        // --- Set Camera Position using Smoothed Angle and Distance ---
+        
+        // Y-axis (vertical rotation)
+        let deltaAngleY = targetCameraAngleY - currentCameraAngleY;
+        currentCameraAngleY += deltaAngleY * rotationSmoothing;
+        
+        // Clamp Y rotation to prevent flipping
+        currentCameraAngleY = Math.max(-maxYAngle, Math.min(maxYAngle, currentCameraAngleY));
+    
+        // --- Set Camera Position using Spherical Coordinates ---
+        // Convert spherical coordinates (distance, xAngle, yAngle) to cartesian (x, y, z)
         camera.position.set(
-            Math.sin(currentCameraAngleX) * smoothedDistance,
-            0, // Keep Y position fixed for horizontal orbit
-            Math.cos(currentCameraAngleX) * smoothedDistance
+            Math.sin(currentCameraAngleX) * Math.cos(currentCameraAngleY) * smoothedDistance,
+            Math.sin(currentCameraAngleY) * smoothedDistance,
+            Math.cos(currentCameraAngleX) * Math.cos(currentCameraAngleY) * smoothedDistance
         );
-
+    
         camera.lookAt(0, 0, 0); // Always look at the center of the scene
     }
     // --- End Camera Movement ---
@@ -589,34 +600,62 @@ function onResults(results) {
                 rightHandLandmarks = landmarks;
 
                 // --- Right Hand: Rotation for Orbit ---
-                if (landmarks && landmarks.length > 9) { // Ensure landmarks are available (wrist=0, middle_mcp=9)
+                if (landmarks && landmarks.length > 9) { // Ensure landmarks are available
                     const wrist = landmarks[0];
                     const middleMcp = landmarks[9];
-
+                
                     // Calculate angle of the hand (vector from wrist to middle finger base)
-                    // atan2 gives angle in radians from -PI to PI
-                    // We subtract PI/2 because atan2(y,x) measures angle from positive X-axis,
-                    // we want angle relative to vertical (upwards Y) for intuitive rotation.
                     const handAngleRad = Math.atan2(middleMcp.y - wrist.y, middleMcp.x - wrist.x) - (Math.PI / 2);
-
-                    // If this is the first frame the right hand is detected, store the initial angle
+                    
+                    // Use the wrist Y position for vertical tilt
+                    const handYPosition = wrist.y;
+                
+                    // If this is the first frame the right hand is detected, store the initial values
                     if (!wasRightHandPresent || initialHandAngle === null) {
                         initialHandAngle = handAngleRad;
-                        // Reset current camera angle to avoid jump if hand reappears at different orientation
+                        initialHandYPosition = handYPosition;
+                        // Reset current camera angles to avoid jumps
                         currentCameraAngleX = targetCameraAngleX;
+                        currentCameraAngleY = targetCameraAngleY;
                     }
-
-                    // Calculate the change in angle relative to the initial angle
+                
+                    // Calculate the change in horizontal angle
                     let angleDelta = handAngleRad - initialHandAngle;
-
-                    // Normalize delta angle to handle wrap-around (e.g., from PI to -PI)
+                    
+                    // Normalize delta angle to handle wrap-around
                     while (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
                     while (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
-
-                    // Update target camera angle based on angle delta and sensitivity
-                    // We negate angleDelta because screen coordinates Y increase downwards
-                    // A clockwise hand rotation (positive angleDelta) should result in orbiting left (negative camera angle change).
+                    
+                    // Calculate the change in vertical position
+                    // We invert this because screen Y coordinates increase downward
+                    const yDelta = initialHandYPosition - handYPosition;
+                    
+                    // Update target camera angles based on hand movements
                     targetCameraAngleX = currentCameraAngleX - (angleDelta * rotationSensitivity);
+                    targetCameraAngleY = currentCameraAngleY + (yDelta * yRotationSensitivity);
+                    
+                    // Clamp Y angle to prevent flipping
+                    targetCameraAngleY = Math.max(-maxYAngle, Math.min(maxYAngle, targetCameraAngleY));
+                    
+                    // Draw a visual indicator of vertical rotation
+                    if (canvasCtx) {
+                        const yIndicatorX = middleMcp.x * canvasElement.width;
+                        const yIndicatorY = middleMcp.y * canvasElement.height;
+                        const yIndicatorLength = 30 * Math.sin(targetCameraAngleY);
+                        
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo(yIndicatorX, yIndicatorY);
+                        canvasCtx.lineTo(yIndicatorX, yIndicatorY + yIndicatorLength);
+                        canvasCtx.strokeStyle = '#FFFF00'; // Yellow
+                        canvasCtx.lineWidth = 4;
+                        canvasCtx.stroke();
+                    }
+                }
+                
+                // --- Reset initial values if right hand disappears ---
+                if (!isRightHandPresent) {
+                    initialHandAngle = null;
+                    initialHandYPosition = null;
                 }
             }
 
@@ -808,7 +847,7 @@ function setupBloom() {
     // Add the UnrealBloomPass with nice default values for particles
     const bloomPass = new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight), // resolution
-      1.3,    // strength (intensity of the bloom)
+      2.0,    // strength (intensity of the bloom)
       0.1,    // radius (how far the bloom extends)
       0.1,    // threshold (minimum brightness to apply bloom)
     );
@@ -817,7 +856,7 @@ function setupBloom() {
     // Add Chromatic Aberration Effect
     const chromaticAberrationPass = new THREE.ShaderPass(ChromaticAberrationShader);
     chromaticAberrationPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
-    chromaticAberrationPass.uniforms.strength.value = 0.2; // Adjust default strength
+    chromaticAberrationPass.uniforms.strength.value = 0.5; // Adjust default strength
     composer.addPass(chromaticAberrationPass);
     
     // Add effect controls to the GUI if it exists

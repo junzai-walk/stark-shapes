@@ -260,3 +260,330 @@ function createSupernova(i, count) {
         Math.cos(phi) * radius
     );
 }
+
+function createKleinBottle(i, count) {
+    // Klein Bottle parameters
+    const a = 15;          // Main radius
+    const b = 4;           // Tube radius
+    const scale = 2.5;     // Overall scale
+    
+    // Use uniform distribution across the surface
+    const lengthSteps = Math.ceil(Math.sqrt(count * 0.5));
+    const circSteps = Math.ceil(count / lengthSteps);
+    
+    // Calculate position in the parametric space
+    const lengthIndex = i % lengthSteps;
+    const circIndex = Math.floor(i / lengthSteps) % circSteps;
+    
+    // Normalize to appropriate ranges
+    const u = (lengthIndex / lengthSteps) * Math.PI * 2;  // 0 to 2π
+    const v = (circIndex / circSteps) * Math.PI * 2;      // 0 to 2π
+    
+    // Klein Bottle parametric equation
+    let x, y, z;
+    
+    // The Klein Bottle has different regions with different parametric equations
+    if (u < Math.PI) {
+        // First half (handle and transition region)
+        x = scale * (a * (1 - Math.cos(u) / 2) * Math.cos(v) - b * Math.sin(u) / 2);
+        y = scale * (a * (1 - Math.cos(u) / 2) * Math.sin(v));
+        z = scale * (a * Math.sin(u) / 2 + b * Math.sin(u) * Math.cos(v));
+    } else {
+        // Second half (main bottle body)
+        x = scale * (a * (1 + Math.cos(u) / 2) * Math.cos(v) + b * Math.sin(u) / 2);
+        y = scale * (a * (1 + Math.cos(u) / 2) * Math.sin(v));
+        z = scale * (-a * Math.sin(u) / 2 + b * Math.sin(u) * Math.cos(v));
+    }
+    
+    return new THREE.Vector3(x, y, z);
+}
+
+function createFlower(i, count) {
+    // Flower/Dandelion parameters
+    const numPetals = 12;          // Number of petals
+    const petalLength = 25;        // Length of petals
+    const centerRadius = 10;       // Radius of center sphere
+    const petalWidth = 0.3;        // Width of petals (0-1)
+    const petalCurve = 0.6;        // How much petals curve outward (0-1)
+    
+    // Calculate whether this particle is in the center or on a petal
+    const centerParticleCount = Math.floor(count * 0.3); // 30% of particles in center
+    const isCenter = i < centerParticleCount;
+    
+    if (isCenter) {
+        // Center particles form a sphere
+        const t = i / centerParticleCount;
+        const phi = Math.acos(2 * t - 1);
+        const theta = 2 * Math.PI * i * (1 + Math.sqrt(5)); // Golden ratio distribution
+        
+        // Create a sphere for the center
+        return new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta) * centerRadius,
+            Math.sin(phi) * Math.sin(theta) * centerRadius,
+            Math.cos(phi) * centerRadius
+        );
+    } else {
+        // Petal particles
+        const petalParticleCount = count - centerParticleCount;
+        const petalIndex = i - centerParticleCount;
+        
+        // Determine which petal this particle belongs to
+        const petalId = petalIndex % numPetals;
+        const positionInPetal = Math.floor(petalIndex / numPetals) / Math.floor(petalParticleCount / numPetals);
+        
+        // Calculate angle of this petal
+        const petalAngle = (petalId / numPetals) * Math.PI * 2;
+        
+        // Calculate radial distance from center
+        // Use a curve so particles are denser at tip and base
+        const radialT = Math.pow(positionInPetal, 0.7); // Adjust density along petal
+        const radialDist = centerRadius + (petalLength * radialT);
+        
+        // Calculate width displacement (thicker at base, thinner at tip)
+        const widthFactor = petalWidth * (1 - radialT * 0.7);
+        const randomWidth = (Math.random() * 2 - 1) * widthFactor * petalLength;
+        
+        // Calculate curve displacement (petals curve outward)
+        const curveFactor = petalCurve * Math.sin(positionInPetal * Math.PI);
+        
+        // Convert to Cartesian coordinates
+        // Main direction follows the petal angle
+        const x = Math.cos(petalAngle) * radialDist + 
+                 Math.cos(petalAngle + Math.PI/2) * randomWidth;
+        
+        const y = Math.sin(petalAngle) * radialDist + 
+                 Math.sin(petalAngle + Math.PI/2) * randomWidth;
+        
+        // Z coordinate creates the upward curve of petals
+        const z = curveFactor * petalLength * (1 - Math.cos(positionInPetal * Math.PI));
+        
+        return new THREE.Vector3(x, y, z);
+    }
+}
+
+function createFractalTree(i, count) {
+    // Fractal Tree parameters
+    const trunkLength = 35;        // Initial trunk length
+    const branchRatio = 0.67;      // Each branch is this ratio of parent length
+    const maxDepth = 6;            // Maximum branching depth
+    const branchAngle = Math.PI / 5; // Angle between branches (36 degrees)
+    
+    // Pre-calculate the total particles needed per depth level
+    // Distribute particles more towards deeper levels
+    const particlesPerLevel = [];
+    let totalWeight = 0;
+    
+    for (let depth = 0; depth <= maxDepth; depth++) {
+        // More branches at deeper levels, distribute particles accordingly
+        // Each level has 2^depth branches
+        const branches = Math.pow(2, depth);
+        const weight = branches * Math.pow(branchRatio, depth);
+        totalWeight += weight;
+        particlesPerLevel.push(weight);
+    }
+    
+    // Normalize to get actual count per level
+    let cumulativeCount = 0;
+    const particleCount = [];
+    
+    for (let depth = 0; depth <= maxDepth; depth++) {
+        const levelCount = Math.floor((particlesPerLevel[depth] / totalWeight) * count);
+        particleCount.push(levelCount);
+        cumulativeCount += levelCount;
+    }
+    
+    // Adjust the last level to ensure we use exactly count particles
+    particleCount[maxDepth] += (count - cumulativeCount);
+    
+    // Determine which depth level this particle belongs to
+    let depth = 0;
+    let levelStartIndex = 0;
+    
+    while (depth < maxDepth && i >= levelStartIndex + particleCount[depth]) {
+        levelStartIndex += particleCount[depth];
+        depth++;
+    }
+    
+    // Calculate the relative index within this depth level
+    const indexInLevel = i - levelStartIndex;
+    const levelCount = particleCount[depth];
+    
+    // Calculate position parameters
+    const t = indexInLevel / (levelCount || 1); // Normalized position in level
+    
+    // For the trunk (depth 0)
+    if (depth === 0) {
+        // Simple line for the trunk
+        return new THREE.Vector3(
+            (Math.random() * 2 - 1) * 0.5, // Small random spread for thickness
+            -trunkLength / 2 + t * trunkLength,
+            (Math.random() * 2 - 1) * 0.5  // Small random spread for thickness
+        );
+    }
+    
+    // For branches at higher depths
+    // Determine which branch in the current depth
+    const branchCount = Math.pow(2, depth);
+    const branchIndex = Math.floor(t * branchCount) % branchCount;
+    const positionInBranch = (t * branchCount) % 1;
+    
+    // Calculate the position based on branch path
+    let x = 0, y = trunkLength / 2, z = 0; // Start at top of trunk
+    let currentLength = trunkLength;
+    let currentAngle = 0;
+    
+    // For the first depth level (branching from trunk)
+    if (depth >= 1) {
+        currentLength *= branchRatio;
+        // Determine left or right branch
+        currentAngle = (branchIndex % 2 === 0) ? branchAngle : -branchAngle;
+        
+        // Move up the branch
+        x += Math.sin(currentAngle) * currentLength * positionInBranch;
+        y += Math.cos(currentAngle) * currentLength * positionInBranch;
+    }
+    
+    // For higher depths, calculate the full path
+    for (let d = 2; d <= depth; d++) {
+        currentLength *= branchRatio;
+        
+        // Determine branch direction at this depth
+        // Use bit operations to determine left vs right at each branch
+        const pathBit = (branchIndex >> (depth - d)) & 1;
+        const nextAngle = pathBit === 0 ? branchAngle : -branchAngle;
+        
+        // Only apply movement for the branches we've completed
+        if (d < depth) {
+            // Rotate the current direction and move full branch length
+            currentAngle += nextAngle;
+            x += Math.sin(currentAngle) * currentLength;
+            y += Math.cos(currentAngle) * currentLength;
+        } else {
+            // For the final branch, move partially based on positionInBranch
+            currentAngle += nextAngle;
+            x += Math.sin(currentAngle) * currentLength * positionInBranch;
+            y += Math.cos(currentAngle) * currentLength * positionInBranch;
+        }
+    }
+    
+    // Add small random offsets for volume
+    const randomSpread = 0.8 * (1 - Math.pow(branchRatio, depth));
+    x += (Math.random() * 2 - 1) * randomSpread;
+    z += (Math.random() * 2 - 1) * randomSpread;
+    
+    return new THREE.Vector3(x, y, z);
+}
+
+function createVoronoi(i, count) {
+    // Voronoi parameters
+    const radius = 30;            // Maximum radius of the sphere to place points on
+    const numSites = 25;          // Number of Voronoi sites (cells)
+    const cellThickness = 2.5;    // Thickness of the cell boundaries
+    const jitter = 0.5;           // Random jitter to make edges look more natural
+    
+    // First, we generate fixed pseudorandom Voronoi sites (cell centers)
+    // We use a deterministic approach to ensure sites are the same for each call
+    const sites = [];
+    for (let s = 0; s < numSites; s++) {
+        // Use a specific seed formula for each site to ensure repeatability
+        const seed1 = Math.sin(s * 42.5) * 10000;
+        const seed2 = Math.cos(s * 15.3) * 10000;
+        const seed3 = Math.sin(s * 33.7) * 10000;
+        
+        // Generate points on a sphere using spherical coordinates
+        const theta = 2 * Math.PI * (seed1 - Math.floor(seed1));
+        const phi = Math.acos(2 * (seed2 - Math.floor(seed2)) - 1);
+        
+        sites.push(new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta) * radius,
+            Math.sin(phi) * Math.sin(theta) * radius,
+            Math.cos(phi) * radius
+        ));
+    }
+    
+    // Now we generate points that lie primarily along the boundaries between Voronoi cells
+    
+    // First, decide if this is a site point (center of a cell) or a boundary point
+    const sitePoints = Math.min(numSites, Math.floor(count * 0.1)); // 10% of points are sites
+    
+    if (i < sitePoints) {
+        // Place this point at a Voronoi site center
+        const siteIndex = i % sites.length;
+        const site = sites[siteIndex];
+        
+        // Return the site position with small random variation
+        return new THREE.Vector3(
+            site.x + (Math.random() * 2 - 1) * jitter,
+            site.y + (Math.random() * 2 - 1) * jitter,
+            site.z + (Math.random() * 2 - 1) * jitter
+        );
+    } else {
+        // This is a boundary point
+        // Generate a random point on the sphere
+        const u = Math.random();
+        const v = Math.random();
+        const theta = 2 * Math.PI * u;
+        const phi = Math.acos(2 * v - 1);
+        
+        const point = new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta) * radius,
+            Math.sin(phi) * Math.sin(theta) * radius,
+            Math.cos(phi) * radius
+        );
+        
+        // Find the two closest sites to this point
+        let closestDist = Infinity;
+        let secondClosestDist = Infinity;
+        let closestSite = null;
+        let secondClosestSite = null;
+        
+        for (const site of sites) {
+            const dist = point.distanceTo(site);
+            
+            if (dist < closestDist) {
+                secondClosestDist = closestDist;
+                secondClosestSite = closestSite;
+                closestDist = dist;
+                closestSite = site;
+            } else if (dist < secondClosestDist) {
+                secondClosestDist = dist;
+                secondClosestSite = site;
+            }
+        }
+        
+        // Check if this point is near the boundary between the two closest cells
+        const distDiff = Math.abs(closestDist - secondClosestDist);
+        
+        if (distDiff < cellThickness) {
+            // This point is on a boundary
+            
+            // Add small random jitter to make the boundary look more natural
+            point.x += (Math.random() * 2 - 1) * jitter;
+            point.y += (Math.random() * 2 - 1) * jitter;
+            point.z += (Math.random() * 2 - 1) * jitter;
+            
+            // Project the point back onto the sphere
+            point.normalize().multiplyScalar(radius);
+            
+            return point;
+        } else {
+            // Not a boundary point, retry with a different approach
+            // Move the point slightly toward the boundary
+            const midpoint = new THREE.Vector3().addVectors(closestSite, secondClosestSite).multiplyScalar(0.5);
+            const dirToMid = new THREE.Vector3().subVectors(midpoint, point).normalize();
+            
+            // Move point toward the midpoint between cells
+            point.add(dirToMid.multiplyScalar(distDiff * 0.7));
+            
+            // Add small random jitter
+            point.x += (Math.random() * 2 - 1) * jitter;
+            point.y += (Math.random() * 2 - 1) * jitter;
+            point.z += (Math.random() * 2 - 1) * jitter;
+            
+            // Project back onto the sphere
+            point.normalize().multiplyScalar(radius);
+            
+            return point;
+        }
+    }
+}

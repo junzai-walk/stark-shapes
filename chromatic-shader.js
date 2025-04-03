@@ -3,7 +3,7 @@ const ChromaticAberrationShader = {
     uniforms: {
       "tDiffuse": { value: null },
       "resolution": { value: new THREE.Vector2(1, 1) },
-      "strength": { value: 0.2 }  // Strength of the chromatic aberration effect
+      "strength": { value: 0.5 }  // Strength of the chromatic aberration effect
     },
   
     vertexShader: /* glsl */`
