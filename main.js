@@ -1,8 +1,6 @@
 /*
-Different color at edges of shape to give more structured look
 Different hand motion to control wave intensity
 Hand motion to switch colors
-Chromatic abberation shader?
 Blur shader?
 */
 
@@ -69,11 +67,11 @@ let gui;
 
 // Animation parameters (configurable via dat.gui)
 const params = {
-    particleCount: 50000,
+    particleCount: 15000,
     transitionSpeed: 0.005,
     cameraSpeed: 0.0, // Set to 0 to disable default camera movement
     waveIntensity: 0.1,
-    particleSize: 0.2,
+    particleSize: 0.5,
     changePattern: function() {
         forcePatternChange();
     }
@@ -787,6 +785,7 @@ function setupHandTracking() {
     }
 }
 
+// Modifications to the setupBloom function
 function setupBloom() {
     // Create a new EffectComposer
     composer = new THREE.EffectComposer(renderer);
@@ -804,13 +803,24 @@ function setupBloom() {
     );
     composer.addPass(bloomPass);
     
-    // Add bloom controls to the GUI if it exists
+    // Add Chromatic Aberration Effect
+    const chromaticAberrationPass = new THREE.ShaderPass(ChromaticAberrationShader);
+    chromaticAberrationPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+    chromaticAberrationPass.uniforms.strength.value = 0.2; // Adjust default strength
+    composer.addPass(chromaticAberrationPass);
+    
+    // Add effect controls to the GUI if it exists
     if (gui) {
       const bloomFolder = gui.addFolder('Bloom Effect');
       bloomFolder.add(bloomPass, 'strength', 0, 3, 0.05).name('Intensity');
       bloomFolder.add(bloomPass, 'radius', 0, 1, 0.05).name('Radius');
       bloomFolder.add(bloomPass, 'threshold', 0, 1, 0.05).name('Threshold');
       bloomFolder.open();
+      
+      // Add Chromatic Aberration controls
+      const chromaticFolder = gui.addFolder('Chromatic Aberration');
+      chromaticFolder.add(chromaticAberrationPass.uniforms.strength, 'value', 0, 0.5, 0.001).name('Strength');
+      chromaticFolder.open();
     }
     
     // Update the resize handler to include the composer
@@ -819,6 +829,10 @@ function setupBloom() {
       originalResize();
       if (composer) {
         composer.setSize(window.innerWidth, window.innerHeight);
+        // Update shader resolution uniform when window is resized
+        if (chromaticAberrationPass) {
+          chromaticAberrationPass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight);
+        }
       }
     };
 }

@@ -74,10 +74,10 @@
   display: block; /* Changed from none */
   position: fixed;
   top: 10px;
-  left: 10px;
+  left: 32%;
   width: 240px; /* Smaller size */
   height: 135px; /* Maintain 16:9 ratio */
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid white;
   z-index: 101; /* Ensure it's above the main canvas slightly */
    transform: scaleX(-1); /* Mirror flip */
 }
@@ -86,7 +86,7 @@
   display: block; /* Changed from none */
   position: fixed;
   top: 10px;
-  left: 10px; /* Position exactly over video */
+  left: 32%;
   width: 240px;
   height: 135px;
   z-index: 102; /* Above video */
@@ -100,15 +100,25 @@
   top: 0 !important;
   right: 0 !important;
   margin: 0 !important;
+  margin: 0 auto;
+  justify-content: center;
+  text-align: center;
 }
 
 .dg.main .close-button {
   background-color: #000 !important;
+  margin: 0 auto;
+  justify-content: center;
+  text-align: center;
 }
 
 .dg.main {
   background-color: rgba(0, 0, 0, 0.8) !important;
   margin-right: 0 !important;
+  max-width: 200px;
+  text-align: center;
+  margin: 0 auto;
+  justify-content: center;
 }
 
 /* Instagram credit link styling */
@@ -118,7 +128,7 @@
   right: 10px;
   color: white;
   font-family: sans-serif;
-  font-size: 14px;
+  font-size: 12px;
   background-color: rgba(0, 0, 0, 0.4);
   padding: 8px 12px;
   border-radius: 5px;

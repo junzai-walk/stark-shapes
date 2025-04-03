@@ -1,5 +1,3 @@
-// Updated pattern functions that place particles only on surfaces
-
 // --- PATTERN FUNCTIONS ---
 function createGrid(i, count) {
     const sideLength = Math.ceil(Math.cbrt(count));
