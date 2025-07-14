@@ -480,7 +480,7 @@ function createVoronoi(i, count) {
     const numSites = 25;          // Number of Voronoi sites (cells)
     const cellThickness = 2.5;    // Thickness of the cell boundaries
     const jitter = 0.5;           // Random jitter to make edges look more natural
-    
+
     // First, we generate fixed pseudorandom Voronoi sites (cell centers)
     // We use a deterministic approach to ensure sites are the same for each call
     const sites = [];
@@ -489,28 +489,28 @@ function createVoronoi(i, count) {
         const seed1 = Math.sin(s * 42.5) * 10000;
         const seed2 = Math.cos(s * 15.3) * 10000;
         const seed3 = Math.sin(s * 33.7) * 10000;
-        
+
         // Generate points on a sphere using spherical coordinates
         const theta = 2 * Math.PI * (seed1 - Math.floor(seed1));
         const phi = Math.acos(2 * (seed2 - Math.floor(seed2)) - 1);
-        
+
         sites.push(new THREE.Vector3(
             Math.sin(phi) * Math.cos(theta) * radius,
             Math.sin(phi) * Math.sin(theta) * radius,
             Math.cos(phi) * radius
         ));
     }
-    
+
     // Now we generate points that lie primarily along the boundaries between Voronoi cells
-    
+
     // First, decide if this is a site point (center of a cell) or a boundary point
     const sitePoints = Math.min(numSites, Math.floor(count * 0.1)); // 10% of points are sites
-    
+
     if (i < sitePoints) {
         // Place this point at a Voronoi site center
         const siteIndex = i % sites.length;
         const site = sites[siteIndex];
-        
+
         // Return the site position with small random variation
         return new THREE.Vector3(
             site.x + (Math.random() * 2 - 1) * jitter,
@@ -524,22 +524,22 @@ function createVoronoi(i, count) {
         const v = Math.random();
         const theta = 2 * Math.PI * u;
         const phi = Math.acos(2 * v - 1);
-        
+
         const point = new THREE.Vector3(
             Math.sin(phi) * Math.cos(theta) * radius,
             Math.sin(phi) * Math.sin(theta) * radius,
             Math.cos(phi) * radius
         );
-        
+
         // Find the two closest sites to this point
         let closestDist = Infinity;
         let secondClosestDist = Infinity;
         let closestSite = null;
         let secondClosestSite = null;
-        
+
         for (const site of sites) {
             const dist = point.distanceTo(site);
-            
+
             if (dist < closestDist) {
                 secondClosestDist = closestDist;
                 secondClosestSite = closestSite;
@@ -550,40 +550,58 @@ function createVoronoi(i, count) {
                 secondClosestSite = site;
             }
         }
-        
+
         // Check if this point is near the boundary between the two closest cells
         const distDiff = Math.abs(closestDist - secondClosestDist);
-        
+
         if (distDiff < cellThickness) {
             // This point is on a boundary
-            
+
             // Add small random jitter to make the boundary look more natural
             point.x += (Math.random() * 2 - 1) * jitter;
             point.y += (Math.random() * 2 - 1) * jitter;
             point.z += (Math.random() * 2 - 1) * jitter;
-            
+
             // Project the point back onto the sphere
             point.normalize().multiplyScalar(radius);
-            
+
             return point;
         } else {
             // Not a boundary point, retry with a different approach
             // Move the point slightly toward the boundary
             const midpoint = new THREE.Vector3().addVectors(closestSite, secondClosestSite).multiplyScalar(0.5);
             const dirToMid = new THREE.Vector3().subVectors(midpoint, point).normalize();
-            
+
             // Move point toward the midpoint between cells
             point.add(dirToMid.multiplyScalar(distDiff * 0.7));
-            
+
             // Add small random jitter
             point.x += (Math.random() * 2 - 1) * jitter;
             point.y += (Math.random() * 2 - 1) * jitter;
             point.z += (Math.random() * 2 - 1) * jitter;
-            
+
             // Project back onto the sphere
             point.normalize().multiplyScalar(radius);
-            
+
             return point;
         }
     }
 }
+
+// Export all pattern functions
+export {
+    createGrid,
+    createSphere,
+    createSpiral,
+    createHelix,
+    createTorus,
+    createVortex,
+    createGalaxy,
+    createWave,
+    createMobius,
+    createSupernova,
+    createKleinBottle,
+    createFlower,
+    createFractalTree,
+    createVoronoi
+};

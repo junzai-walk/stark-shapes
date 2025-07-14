@@ -46,3 +46,6 @@ const ChromaticAberrationShader = {
       }
     `
   };
+
+// Export the shader
+export { ChromaticAberrationShader };

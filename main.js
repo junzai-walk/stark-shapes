@@ -5,6 +5,26 @@ Blur shader?
 */
 
 // main.js
+// Import pattern functions
+import {
+    createGrid,
+    createSphere,
+    createSpiral,
+    createHelix,
+    createTorus,
+    createVortex,
+    createGalaxy,
+    createWave,
+    createMobius,
+    createSupernova,
+    createKleinBottle,
+    createFlower,
+    createFractalTree,
+    createVoronoi
+} from './geometry.js';
+
+// Import chromatic aberration shader
+import { ChromaticAberrationShader } from './chromatic-shader.js';
 const patterns = [createGrid, createSphere, createSpiral,
 createHelix, createTorus, createVortex, createGalaxy,
 createWave, createMobius, createSupernova, createKleinBottle,
@@ -663,7 +683,9 @@ function onResults(results) {
             const color = isLeft ? '#00FF00' : '#0088FF'; // Green lines Left, Blue lines Right
             const dotColor = isLeft ? '#FF0044' : '#FFFF00'; // Red dots Left, Yellow dots Right
             if (landmarks) {
-                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: color, lineWidth: 2 });
+                // Check if HAND_CONNECTIONS is available, otherwise use a fallback
+                const connections = (typeof HAND_CONNECTIONS !== 'undefined') ? HAND_CONNECTIONS : [];
+                drawConnectors(canvasCtx, landmarks, connections, { color: color, lineWidth: 2 });
                 drawLandmarks(canvasCtx, landmarks, { color: dotColor, lineWidth: 1, radius: 3 });
                 
                 // --- Draw hand function label ---
